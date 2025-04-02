@@ -242,28 +242,28 @@ export default function Home() {
 
   // Function to handle mouse movement over the PDF container
   const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
-    if (!analysisResult || !containerRef.current || !containerWidth) return; // Need containerWidth too
+    if (!analysisResult || !containerRef.current) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const mouseX = event.clientX - containerRect.left + containerRef.current.scrollLeft;
     const mouseY = event.clientY - containerRect.top + containerRef.current.scrollTop;
 
-    const pageNumber = 1; // Placeholder - Needs better calculation
+    // Determine which page is being hovered (simplistic approach: assume only one page visible at a time for now)
+    // A more robust solution would need page offsets if multiple pages are rendered vertically
+    const pageNumber = 1; // Placeholder - Needs better calculation if multi-page scrolling
     
+    // Find the box being hovered
     let foundBoxKey: string | null = null;
-    // Use forEach with index to match the map key generation
-    analysisResult.forEach((box, boxIndex) => {
+    for (const box of analysisResult) {
         if (box.page_number === pageNumber) {
-            const boxKey = `box_${pageNumber}_${boxIndex}`; // Match key generation
-            const boxContainerWidth = containerWidth; // Use state variable
-            const pageAspectRatio = box.page_height / box.page_width;
-            const pageRenderedHeight = boxContainerWidth * pageAspectRatio;
+            const boxKey = `box_${box.page_number}_${box.text.substring(0, 10)}_${box.left}_${box.top}`; // Need a unique key
+            const boxContainerWidth = containerRef.current.offsetWidth; // Use actual container width
 
-            // Calculate box position/size in pixels relative to container, using percentages
+            // Calculate box position/size in pixels relative to container
             const leftPx = (box.left / box.page_width) * boxContainerWidth;
-            const topPx = (box.top / box.page_height) * pageRenderedHeight;
+            const topPx = (box.top / box.page_height) * (boxContainerWidth * (box.page_height / box.page_width)); // Scale top based on aspect ratio
             const widthPx = (box.width / box.page_width) * boxContainerWidth;
-            const heightPx = (box.height / box.page_height) * pageRenderedHeight;
+            const heightPx = (box.height / box.page_height) * (boxContainerWidth * (box.page_height / box.page_width)); // Scale height based on aspect ratio
 
             if (
                 mouseX >= leftPx &&
@@ -271,15 +271,11 @@ export default function Home() {
                 mouseY >= topPx &&
                 mouseY <= topPx + heightPx
             ) {
-                // Check if we already found a box; prefer the one with smaller area (likely more specific)
-                // Simple check for now: just take the first one found in DOM order
-                if (foundBoxKey === null) { // Take the first match for now
-                    foundBoxKey = boxKey;
-                }
-                // Note: Could add logic here to find the smallest overlapping box if needed.
+                foundBoxKey = boxKey;
+                break; // Found the topmost box under cursor
             }
         }
-    }); // End of forEach
+    }
 
     if (foundBoxKey !== hoveredBoxKey) {
         setHoveredBoxKey(foundBoxKey);
@@ -391,9 +387,9 @@ export default function Home() {
                       {/* Overlay Bounding boxes only if analysisResult is available */}
                       {analysisResult && analysisResult
                         .filter(box => box.page_number === pageNumber)
-                        .map((box, boxIndex) => {
-                          // Regenerate the unique key using boxIndex
-                          const boxKey = `box_${pageNumber}_${boxIndex}`;
+                        .map((box) => {
+                          // Regenerate the same unique key used in handleMouseMove
+                          const boxKey = `box_${box.page_number}_${box.text.substring(0, 10)}_${box.left}_${box.top}`;
                           const isHovered = boxKey === hoveredBoxKey;
 
                           const leftPercent = (box.left / box.page_width) * 100;
@@ -403,7 +399,7 @@ export default function Home() {
 
                           return (
                             <div
-                              key={boxKey} // Use the unique key with boxIndex
+                              key={boxKey} // Use the unique key
                               title={`${box.type}: ${box.text.substring(0, 100)}...`}
                               style={{
                                 position: 'absolute',
@@ -415,10 +411,8 @@ export default function Home() {
                                 backgroundColor: getTypeColor(box.type),
                                 boxSizing: 'border-box',
                                 pointerEvents: 'none', // Keep this active
-                                transition: 'filter 0.15s ease-in-out, transform 0.15s ease-in-out', // Re-add transform transition
+                                transition: 'filter 0.15s ease-in-out', // Only transition filter for now
                                 filter: isHovered ? 'brightness(125%)' : 'brightness(100%)', // Apply brightness
-                                transform: isHovered ? 'scale(1.02)' : 'scale(1)', // Re-add scale
-                                zIndex: isHovered ? 10 : 1, // Re-add zIndex 
                               }}
                             >
                               <span style={{
