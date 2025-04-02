@@ -41,29 +41,4 @@ body {
   /* DO NOT force canvas width here */
 }
 
-/* Target bounding boxes using attribute selector for inline style */
-.pdf-page-wrapper > div[style*="position: absolute"]:hover {
-  filter: brightness(110%);
-  cursor: pointer;
-  transition: filter 0.15s ease-in-out; /* Add transition here */
-}
-
-/* Bounding Box Hover Logic */
-
-.pdf-bounding-box-hover-target {
-  /* Outer div - mostly for positioning and catching hover */
-}
-
-.pdf-bounding-box-hover-target:hover {
-  cursor: pointer;
-}
-
-.pdf-bounding-box-visual {
-  /* Inner div - visual styles are mostly inline */
-  filter: brightness(100%); /* Base state */
-}
-
-.pdf-bounding-box-hover-target:hover > .pdf-bounding-box-visual {
-  /* Apply filter to inner div when outer div is hovered */
-  filter: brightness(110%);
-}
+/* REMOVING Hover CSS */
