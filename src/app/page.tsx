@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ChangeEvent, FormEvent, useEffect } from 'react';
+import { useState, ChangeEvent, FormEvent, useEffect, useRef, useCallback } from 'react';
 // Import react-pdf components and configure worker
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -54,6 +54,33 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [usingCachedResult, setUsingCachedResult] = useState<boolean>(false);
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null); // Ref for the container div
+
+  // Use ResizeObserver to track container width
+  const onResize = useCallback((entries: ResizeObserverEntry[]) => {
+    const entry = entries[0];
+    if (entry) {
+      setContainerWidth(entry.contentRect.width);
+    }
+  }, []);
+
+  useEffect(() => {
+    const observer = new ResizeObserver(onResize);
+    const currentRef = containerRef.current;
+
+    if (currentRef) {
+      observer.observe(currentRef);
+      // Set initial width
+      setContainerWidth(currentRef.offsetWidth);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [onResize]); // Add onResize dependency
 
   // Configure worker on component mount
   useEffect(() => {
@@ -101,6 +128,7 @@ export default function Home() {
       }
       const newFileUrl = URL.createObjectURL(selectedFile);
       setFileUrl(newFileUrl);
+      setContainerWidth(containerRef.current?.offsetWidth ?? null); // Reset width on new file
 
       // Check localStorage for cached results
       const resultCacheKey = `${LS_RESULT_PREFIX}${currentFileName}`;
@@ -279,7 +307,7 @@ export default function Home() {
             {/* Show analysis summary only when results are available */}
             {analysisResult && <p className="mb-4">Found {analysisResult.length} segments across {numPages ?? '...'} pages.</p>}
             
-            <div className="overflow-auto max-h-[80vh] border">
+            <div ref={containerRef} className="overflow-auto max-h-[80vh] border">
               <Document
                 file={fileUrl}
                 onLoadSuccess={onDocumentLoadSuccess}
@@ -302,12 +330,13 @@ export default function Home() {
                       <Page
                         key={`page_${pageNumber}`}
                         pageNumber={pageNumber}
+                        width={containerWidth ? containerWidth : undefined} // Pass container width directly
                       />
                       {/* Overlay Bounding boxes only if analysisResult is available */}
                       {analysisResult && analysisResult
                         .filter(box => box.page_number === pageNumber)
                         .map((box, boxIndex) => {
-                          // REVERTED to percentage calculation
+                          // Percentage calculation
                           const leftPercent = (box.left / box.page_width) * 100;
                           const topPercent = (box.top / box.page_height) * 100;
                           const widthPercent = (box.width / box.page_width) * 100;
@@ -319,10 +348,10 @@ export default function Home() {
                               title={`${box.type}: ${box.text.substring(0, 100)}...`}
                               style={{
                                 position: 'absolute',
-                                left: `${leftPercent}%`, // Use percentage
-                                top: `${topPercent}%`,   // Use percentage
-                                width: `${widthPercent}%`, // Use percentage
-                                height: `${heightPercent}%`, // Use percentage
+                                left: `${leftPercent}%`,
+                                top: `${topPercent}%`,
+                                width: `${widthPercent}%`,
+                                height: `${heightPercent}%`,
                                 border: `2px solid ${getTypeColor(box.type).replace('0.2', '1.0')}`,
                                 backgroundColor: getTypeColor(box.type),
                                 boxSizing: 'border-box',

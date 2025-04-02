@@ -32,13 +32,11 @@ body {
   /* The position: relative is already set inline */
   /* Ensure the wrapper allows child to align left */
   display: block; /* Or flex with align-items: flex-start if needed */
-  width: 100%; /* Force wrapper to fill horizontal space */
 }
 
 .pdf-page-wrapper .react-pdf__Page__canvas {
   /* Target the canvas rendered by react-pdf */
   /* Override potential default centering styles */
   margin: 0 !important; 
-  width: 100% !important; /* Force canvas to fill horizontal space */
-  height: auto !important; /* Maintain aspect ratio */
+  /* DO NOT force canvas width here */
 }
