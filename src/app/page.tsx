@@ -245,25 +245,29 @@ export default function Home() {
     if (!analysisResult || !containerRef.current) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
+    // Calculate mouse position relative to the scrolled container content
     const mouseX = event.clientX - containerRect.left + containerRef.current.scrollLeft;
     const mouseY = event.clientY - containerRect.top + containerRef.current.scrollTop;
 
-    // Determine which page is being hovered (simplistic approach: assume only one page visible at a time for now)
-    // A more robust solution would need page offsets if multiple pages are rendered vertically
-    const pageNumber = 1; // Placeholder - Needs better calculation if multi-page scrolling
+    // Determine which page is being hovered (simplistic approach - needs improvement for scrolling)
+    const pageNumber = 1; // Placeholder
     
-    // Find the box being hovered
+    // Find the smallest box being hovered
     let foundBoxKey: string | null = null;
-    for (const box of analysisResult) {
+    let minArea = Infinity;
+
+    analysisResult.forEach((box, boxIndex) => { // Use forEach and boxIndex
         if (box.page_number === pageNumber) {
-            const boxKey = `box_${box.page_number}_${box.text.substring(0, 10)}_${box.left}_${box.top}`; // Need a unique key
-            const boxContainerWidth = containerRef.current.offsetWidth; // Use actual container width
+            const boxKey = `box_${box.page_number}_${boxIndex}`; // Use index for unique key
+            const boxContainerWidth = containerRef.current!.offsetWidth; // Use actual container width
+            const renderedPageHeight = boxContainerWidth * (box.page_height / box.page_width);
 
             // Calculate box position/size in pixels relative to container
             const leftPx = (box.left / box.page_width) * boxContainerWidth;
-            const topPx = (box.top / box.page_height) * (boxContainerWidth * (box.page_height / box.page_width)); // Scale top based on aspect ratio
+            const topPx = (box.top / box.page_height) * renderedPageHeight;
             const widthPx = (box.width / box.page_width) * boxContainerWidth;
-            const heightPx = (box.height / box.page_height) * (boxContainerWidth * (box.page_height / box.page_width)); // Scale height based on aspect ratio
+            const heightPx = (box.height / box.page_height) * renderedPageHeight;
+            const area = widthPx * heightPx;
 
             if (
                 mouseX >= leftPx &&
@@ -271,11 +275,15 @@ export default function Home() {
                 mouseY >= topPx &&
                 mouseY <= topPx + heightPx
             ) {
-                foundBoxKey = boxKey;
-                break; // Found the topmost box under cursor
+                // If this box contains the mouse and is smaller than the previous smallest, update
+                if (area < minArea) {
+                    minArea = area;
+                    foundBoxKey = boxKey;
+                }
+                // Removed the break statement
             }
         }
-    }
+    }); // End forEach
 
     if (foundBoxKey !== hoveredBoxKey) {
         setHoveredBoxKey(foundBoxKey);
@@ -387,9 +395,9 @@ export default function Home() {
                       {/* Overlay Bounding boxes only if analysisResult is available */}
                       {analysisResult && analysisResult
                         .filter(box => box.page_number === pageNumber)
-                        .map((box) => {
-                          // Regenerate the same unique key used in handleMouseMove
-                          const boxKey = `box_${box.page_number}_${box.text.substring(0, 10)}_${box.left}_${box.top}`;
+                        .map((box, boxIndex) => {
+                          // Use the same unique key generation as in handleMouseMove
+                          const boxKey = `box_${box.page_number}_${boxIndex}`; // Use boxIndex
                           const isHovered = boxKey === hoveredBoxKey;
 
                           const leftPercent = (box.left / box.page_width) * 100;
@@ -411,8 +419,11 @@ export default function Home() {
                                 backgroundColor: getTypeColor(box.type),
                                 boxSizing: 'border-box',
                                 pointerEvents: 'none', // Keep this active
-                                transition: 'filter 0.15s ease-in-out', // Only transition filter for now
+                                transition: 'filter 0.15s ease-in-out, transform 0.15s ease-in-out', // Add transform transition
                                 filter: isHovered ? 'brightness(125%)' : 'brightness(100%)', // Apply brightness
+                                transform: isHovered ? 'scale(1.02)' : 'scale(1)', // RE-ADD scale
+                                transformOrigin: 'center center', // Ensure scaling originates from the center
+                                zIndex: isHovered ? 10 : 1, // Bring hovered box slightly forward
                               }}
                             >
                               <span style={{
