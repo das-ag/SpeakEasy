@@ -343,8 +343,10 @@ export default function Home() {
                           const heightPercent = (box.height / box.page_height) * 100;
 
                           return (
+                            // Outer div: handles positioning and hover detection
                             <div
-                              key={`box_${pageNumber}_${boxIndex}`}
+                              key={`box_wrapper_${pageNumber}_${boxIndex}`}
+                              className="pdf-bounding-box-hover-target" // Class for hover detection
                               title={`${box.type}: ${box.text.substring(0, 100)}...`}
                               style={{
                                 position: 'absolute',
@@ -352,25 +354,38 @@ export default function Home() {
                                 top: `${topPercent}%`,
                                 width: `${widthPercent}%`,
                                 height: `${heightPercent}%`,
-                                border: `2px solid ${getTypeColor(box.type).replace('0.2', '1.0')}`,
-                                backgroundColor: getTypeColor(box.type),
                                 boxSizing: 'border-box',
-                                pointerEvents: 'none',
+                                zIndex: 2, // Ensure hover target is above visual box if needed
                               }}
                             >
-                              <span style={{
-                                position: 'absolute',
-                                top: '-18px',
-                                left: '0',
-                                backgroundColor: getTypeColor(box.type).replace('0.2', '0.8'),
-                                color: 'white',
-                                padding: '1px 3px',
-                                fontSize: '10px',
-                                whiteSpace: 'nowrap',
-                                zIndex: 1
-                              }}>
-                                {box.type}
-                              </span>
+                              {/* Inner div: handles visual appearance, remains non-interactive */}
+                              <div
+                                className="pdf-bounding-box-visual" // Class for visual styling
+                                style={{
+                                  width: '100%', // Fill the outer div
+                                  height: '100%', // Fill the outer div
+                                  border: `2px solid ${getTypeColor(box.type).replace('0.2', '1.0')}`,
+                                  backgroundColor: getTypeColor(box.type),
+                                  boxSizing: 'border-box',
+                                  pointerEvents: 'none', // Keep this on the visual part
+                                  transition: 'filter 0.15s ease-in-out', // Transition on visual part
+                                }}
+                              >
+                                {/* Label Span - now inside the inner visual div */} 
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '-18px',
+                                  left: '0',
+                                  backgroundColor: getTypeColor(box.type).replace('0.2', '0.8'),
+                                  color: 'white',
+                                  padding: '1px 3px',
+                                  fontSize: '10px',
+                                  whiteSpace: 'nowrap',
+                                  zIndex: 1 // Keep below hover target if needed, but above bg
+                                }}>
+                                  {box.type}
+                                </span>
+                              </div>
                             </div>
                           );
                         })}
