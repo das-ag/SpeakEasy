@@ -56,7 +56,7 @@ export default function Home() {
   const [usingCachedResult, setUsingCachedResult] = useState<boolean>(false);
   const [containerWidth, setContainerWidth] = useState<number | null>(null); // Restore containerWidth
   const containerRef = useRef<HTMLDivElement>(null); // Ref for the container div
-  const [hoveredBoxKey, setHoveredBoxKey] = useState<string | null>(null);
+  const [hoveredBox, setHoveredBox] = useState<SegmentBox | null>(null); // Store the box object
 
   // Restore ResizeObserver logic
   const onResize = useCallback((entries: ResizeObserverEntry[]) => {
@@ -285,8 +285,8 @@ export default function Home() {
 
     // If no page is actively hovered (e.g., in margins), exit
     if (hoveredPageNumber === null) {
-        if (hoveredBoxKey !== null) {
-             setHoveredBoxKey(null); // Clear hover if mouse moved out of all pages
+        if (hoveredBox !== null) {
+             setHoveredBox(null); // Clear hover if mouse moved out of all pages
         }
         return;
     }
@@ -298,7 +298,7 @@ export default function Home() {
 
     if (!currentPageElement || !canvasElement || canvasElement.offsetWidth <= 0 || canvasElement.offsetHeight <= 0) {
         console.error("Could not find valid page element or canvas for hover calculation.");
-        if (hoveredBoxKey !== null) setHoveredBoxKey(null); // Clear hover if calculation fails
+        if (hoveredBox !== null) setHoveredBox(null); // Clear hover if calculation fails
         return;
     }
 
@@ -317,13 +317,11 @@ export default function Home() {
     // --- End: Calculations based on hovered page ---
 
     // Find the smallest box being hovered on the determined page
-    let foundBoxKey: string | null = null;
+    let foundBox: SegmentBox | null = null; // Store the found box object
     let minArea = Infinity;
 
-    analysisResult.forEach((box, boxIndex) => {
+    analysisResult.forEach((box) => {
         if (box.page_number === hoveredPageNumber) { // Use the dynamically found page number
-            const boxKey = `box_${box.page_number}_${boxIndex}`;
-
             // Get the box's percentage dimensions (used for styling)
             const leftPercent = (box.left / box.page_width) * 100;
             const topPercent = (box.top / box.page_height) * 100;
@@ -344,22 +342,23 @@ export default function Home() {
                 // Use percentage area for comparison
                 if (areaPercent < minArea) {
                     minArea = areaPercent;
-                    foundBoxKey = boxKey;
+                    foundBox = box; // Set the found box object
                 }
             }
         }
     });
 
     // Log the final key before setting state
-    console.log(`Final foundBoxKey: ${foundBoxKey}, Previous hoveredBoxKey: ${hoveredBoxKey}`); // Keep this one
+    console.log(`Final foundBox: ${foundBox ? 'Exists' : 'null'}, Previous hoveredBox: ${hoveredBox ? 'Exists' : 'null'}`); // Simplified log
 
-    if (foundBoxKey !== hoveredBoxKey) {
-        setHoveredBoxKey(foundBoxKey);
+    // Update state if the hovered box object has changed
+    if (foundBox !== hoveredBox) {
+        setHoveredBox(foundBox);
     }
   };
 
   const handleMouseLeave = () => {
-    setHoveredBoxKey(null);
+    setHoveredBox(null);
   };
 
   return (
@@ -430,9 +429,9 @@ export default function Home() {
             {/* Show analysis summary only when results are available */}
             {analysisResult && <p className="mb-4">Found {analysisResult.length} segments across {numPages ?? '...'} pages.</p>}
             
-            <div 
-              ref={containerRef} 
-              className="overflow-auto max-h-[80vh] border relative" // Add relative for positioning context if needed
+            <div
+              ref={containerRef}
+              className="overflow-auto border relative"
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
             >
@@ -466,8 +465,8 @@ export default function Home() {
                         .filter(box => box.page_number === pageNumber)
                         .map((box, boxIndex) => {
                           // Use the same unique key generation as in handleMouseMove
-                          const boxKey = `box_${box.page_number}_${boxIndex}`; // Use boxIndex
-                          const isHovered = boxKey === hoveredBoxKey;
+                          // Compare actual box object with the one in state
+                          const isHovered = hoveredBox === box;
 
                           const leftPercent = (box.left / box.page_width) * 100;
                           const topPercent = (box.top / box.page_height) * 100;
@@ -476,7 +475,7 @@ export default function Home() {
 
                           return (
                             <div
-                              key={boxKey} // Use the unique key
+                              key={`render_box_${pageNumber}_${boxIndex}`} // Use map index for stable React key
                               title={`${box.type}: ${box.text.substring(0, 100)}...`}
                               style={{
                                 position: 'absolute',
