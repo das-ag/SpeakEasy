@@ -43,7 +43,7 @@ const getTypeColor = (type: string): string => {
 
 // localStorage keys
 const LS_RESULT_PREFIX = 'speakeasy_analysis_result_';
-// const LS_NUMPAGES_PREFIX = 'speakeasy_num_pages_'; // Removed as numPages is no longer cached
+const LS_NUMPAGES_PREFIX = 'speakeasy_num_pages_'; // Removed as numPages is no longer cached
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -54,11 +54,11 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [usingCachedResult, setUsingCachedResult] = useState<boolean>(false);
-  const [containerWidth, setContainerWidth] = useState<number | null>(null);
+  const [containerWidth, setContainerWidth] = useState<number | null>(null); // Restore containerWidth
   const containerRef = useRef<HTMLDivElement>(null); // Ref for the container div
   const [hoveredBoxKey, setHoveredBoxKey] = useState<string | null>(null);
 
-  // Use ResizeObserver to track container width
+  // Restore ResizeObserver logic
   const onResize = useCallback((entries: ResizeObserverEntry[]) => {
     const entry = entries[0];
     if (entry) {
@@ -81,7 +81,7 @@ export default function Home() {
         observer.unobserve(currentRef);
       }
     };
-  }, [onResize]); // Add onResize dependency
+  }, [onResize]);
 
   // Configure worker on component mount
   useEffect(() => {
@@ -129,7 +129,7 @@ export default function Home() {
       }
       const newFileUrl = URL.createObjectURL(selectedFile);
       setFileUrl(newFileUrl);
-      setContainerWidth(containerRef.current?.offsetWidth ?? null); // Reset width on new file
+      setContainerWidth(containerRef.current?.offsetWidth ?? null); // Restore width reset
 
       // Check localStorage for cached results
       const resultCacheKey = `${LS_RESULT_PREFIX}${currentFileName}`;
@@ -215,13 +215,13 @@ export default function Home() {
     setNumPages(nextNumPages);
     // If analysis results exist and we have a filename, save numPages to cache
     // Remove saving logic - numPages is determined by react-pdf on load
-    /*
+    
     if (analysisResult && fileName && !usingCachedResult) { // Only save if it was a fresh analysis
         const numPagesSaveKey = `${LS_NUMPAGES_PREFIX}${fileName}`;
         console.log(`Attempting to save numPages (${nextNumPages}) to cache with key: ${numPagesSaveKey}`); // Log save key
         localStorage.setItem(numPagesSaveKey, JSON.stringify(nextNumPages));
     }
-    */
+    
   }
 
   // Function to clear cache for the current file
@@ -242,48 +242,116 @@ export default function Home() {
 
   // Function to handle mouse movement over the PDF container
   const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
-    if (!analysisResult || !containerRef.current) return;
+    console.log('handleMouseMove triggered');
+    console.log('analysisResult:', analysisResult ? 'Exists' : 'null'); // Log analysisResult status
+    console.log('containerRef.current:', containerRef.current ? 'Exists' : 'null'); // Log ref status
+    if (!analysisResult || !containerRef.current) {
+        console.log('Exiting early: analysisResult or containerRef.current is null.'); // Log if exiting
+        return;
+    }
 
-    const containerRect = containerRef.current.getBoundingClientRect();
+    const container = containerRef.current;
+    const containerRect = container.getBoundingClientRect();
     // Calculate mouse position relative to the scrolled container content
-    const mouseX = event.clientX - containerRect.left + containerRef.current.scrollLeft;
-    const mouseY = event.clientY - containerRect.top + containerRef.current.scrollTop;
+    const mouseXRelative = event.clientX - containerRect.left; // Relative to container viewport
+    const mouseYRelative = event.clientY - containerRect.top; // Relative to container viewport
+    const mouseX = mouseXRelative + container.scrollLeft; // Relative to container scrollable content
+    const mouseY = mouseYRelative + container.scrollTop; // Relative to container scrollable content
 
-    // Determine which page is being hovered (simplistic approach - needs improvement for scrolling)
-    const pageNumber = 1; // Placeholder
-    
-    // Find the smallest box being hovered
+    // Find the currently hovered page element
+    let hoveredPageNumber: number | null = null;
+    const pageElements = container.querySelectorAll<HTMLDivElement>('.pdf-page-wrapper');
+    console.log(`Found ${pageElements.length} page elements.`);
+
+    pageElements.forEach(pageElement => {
+        const pageTop = pageElement.offsetTop;
+        const pageBottom = pageTop + pageElement.offsetHeight;
+        const pageNumAttr = pageElement.getAttribute('data-page-number'); // Get page number for logging
+
+        // Debugging Logs:
+        // console.log(`Page ${pageNumAttr}: Top=${pageTop}, Bottom=${pageBottom}, MouseY=${mouseY}`); // Commented out
+
+        // Check if the mouse Y position is within the vertical bounds of this page element
+        if (mouseY >= pageTop && mouseY < pageBottom) {
+             console.log(`>>> Hovering Page ${pageNumAttr}`); // Keep this one
+            if (pageNumAttr) {
+                hoveredPageNumber = parseInt(pageNumAttr, 10);
+                // Exit the loop once the page is found
+                // Note: forEach cannot be broken directly, but this logic works.
+                // If performance is critical, a standard for loop could be used.
+            }
+        }
+    });
+
+    // If no page is actively hovered (e.g., in margins), exit
+    if (hoveredPageNumber === null) {
+        if (hoveredBoxKey !== null) {
+             setHoveredBoxKey(null); // Clear hover if mouse moved out of all pages
+        }
+        return;
+    }
+
+    // --- Start: Calculations based on hovered page ---
+    const currentPageElement = container.querySelector<HTMLDivElement>(`.pdf-page-wrapper[data-page-number="${hoveredPageNumber}"]`);
+    // Find the canvas within the page wrapper
+    const canvasElement = currentPageElement?.querySelector('canvas');
+
+    if (!currentPageElement || !canvasElement || canvasElement.offsetWidth <= 0 || canvasElement.offsetHeight <= 0) {
+        console.error("Could not find valid page element or canvas for hover calculation.");
+        if (hoveredBoxKey !== null) setHoveredBoxKey(null); // Clear hover if calculation fails
+        return;
+    }
+
+    const renderedWidth = canvasElement.offsetWidth; // Use canvas width
+    const renderedHeight = canvasElement.offsetHeight; // Use canvas height
+    const pageOffsetTop = currentPageElement.offsetTop;
+    const pageOffsetLeft = currentPageElement.offsetLeft;
+
+    // Calculate mouse position relative to the page element's top-left corner
+    const mouseXOnPage = mouseX - pageOffsetLeft;
+    const mouseYOnPage = mouseY - pageOffsetTop;
+
+    // Calculate mouse position as percentage using consistent aspect ratio
+    const mouseXPercent = (mouseXOnPage / renderedWidth) * 100;
+    const mouseYPercent = (mouseYOnPage / renderedHeight) * 100; // Use rendered canvas height
+    // --- End: Calculations based on hovered page ---
+
+    // Find the smallest box being hovered on the determined page
     let foundBoxKey: string | null = null;
     let minArea = Infinity;
 
-    analysisResult.forEach((box, boxIndex) => { // Use forEach and boxIndex
-        if (box.page_number === pageNumber) {
-            const boxKey = `box_${box.page_number}_${boxIndex}`; // Use index for unique key
-            const boxContainerWidth = containerRef.current!.offsetWidth; // Use actual container width
-            const renderedPageHeight = boxContainerWidth * (box.page_height / box.page_width);
+    analysisResult.forEach((box, boxIndex) => {
+        if (box.page_number === hoveredPageNumber) { // Use the dynamically found page number
+            const boxKey = `box_${box.page_number}_${boxIndex}`;
 
-            // Calculate box position/size in pixels relative to container
-            const leftPx = (box.left / box.page_width) * boxContainerWidth;
-            const topPx = (box.top / box.page_height) * renderedPageHeight;
-            const widthPx = (box.width / box.page_width) * boxContainerWidth;
-            const heightPx = (box.height / box.page_height) * renderedPageHeight;
-            const area = widthPx * heightPx;
+            // Get the box's percentage dimensions (used for styling)
+            const leftPercent = (box.left / box.page_width) * 100;
+            const topPercent = (box.top / box.page_height) * 100;
+            const widthPercent = (box.width / box.page_width) * 100;
+            const heightPercent = (box.height / box.page_height) * 100;
 
+            // Calculate percentage area for smallest box comparison
+            const areaPercent = widthPercent * heightPercent;
+
+            // Check if the mouse percentage position is inside the box's percentage boundaries
             if (
-                mouseX >= leftPx &&
-                mouseX <= leftPx + widthPx &&
-                mouseY >= topPx &&
-                mouseY <= topPx + heightPx
-            ) {
-                // If this box contains the mouse and is smaller than the previous smallest, update
-                if (area < minArea) {
-                    minArea = area;
+                mouseXPercent >= leftPercent &&
+                mouseXPercent <= leftPercent + widthPercent &&
+                mouseYPercent >= topPercent &&
+                mouseYPercent <= topPercent + heightPercent
+            )
+            {
+                // Use percentage area for comparison
+                if (areaPercent < minArea) {
+                    minArea = areaPercent;
                     foundBoxKey = boxKey;
                 }
-                // Removed the break statement
             }
         }
-    }); // End forEach
+    });
+
+    // Log the final key before setting state
+    console.log(`Final foundBoxKey: ${foundBoxKey}, Previous hoveredBoxKey: ${hoveredBoxKey}`); // Keep this one
 
     if (foundBoxKey !== hoveredBoxKey) {
         setHoveredBoxKey(foundBoxKey);
@@ -378,19 +446,20 @@ export default function Home() {
                 }}
                 loading="Loading PDF Preview..."
               >
-                {/* Render pages only when numPages is known */} 
+                {/* Render pages only when numPages is known */}
                 {numPages && Array.from(new Array(numPages), (el, index) => {
                   const pageNumber = index + 1;
                   return (
                     <div
                       key={`page_container_${pageNumber}`}
                       className="pdf-page-wrapper"
+                      data-page-number={pageNumber} // Add data attribute
                       style={{ position: 'relative', marginBottom: '1rem' }}
                     >
                       <Page
                         key={`page_${pageNumber}`}
                         pageNumber={pageNumber}
-                        width={containerWidth ? containerWidth : undefined} // Pass container width directly
+                        width={containerWidth ? containerWidth : undefined} // Restore width prop
                       />
                       {/* Overlay Bounding boxes only if analysisResult is available */}
                       {analysisResult && analysisResult
