@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ChangeEvent, FormEvent, useEffect, useRef, useCallback, MouseEvent } from 'react';
+import { useState, ChangeEvent, FormEvent, useEffect, useRef, MouseEvent } from 'react';
 // Import react-pdf components and configure worker
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -54,34 +54,8 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [usingCachedResult, setUsingCachedResult] = useState<boolean>(false);
-  const [containerWidth, setContainerWidth] = useState<number | null>(null); // Restore containerWidth
   const containerRef = useRef<HTMLDivElement>(null); // Ref for the container div
   const [hoveredBox, setHoveredBox] = useState<SegmentBox | null>(null); // Store the box object
-
-  // Restore ResizeObserver logic
-  const onResize = useCallback((entries: ResizeObserverEntry[]) => {
-    const entry = entries[0];
-    if (entry) {
-      setContainerWidth(entry.contentRect.width);
-    }
-  }, []);
-
-  useEffect(() => {
-    const observer = new ResizeObserver(onResize);
-    const currentRef = containerRef.current;
-
-    if (currentRef) {
-      observer.observe(currentRef);
-      // Set initial width
-      setContainerWidth(currentRef.offsetWidth);
-    }
-
-    return () => {
-      if (currentRef) {
-        observer.unobserve(currentRef);
-      }
-    };
-  }, [onResize]);
 
   // Configure worker on component mount
   useEffect(() => {
@@ -129,7 +103,6 @@ export default function Home() {
       }
       const newFileUrl = URL.createObjectURL(selectedFile);
       setFileUrl(newFileUrl);
-      setContainerWidth(containerRef.current?.offsetWidth ?? null); // Restore width reset
 
       // Check localStorage for cached results
       const resultCacheKey = `${LS_RESULT_PREFIX}${currentFileName}`;
@@ -418,23 +391,30 @@ export default function Home() {
         )}
 
         {/* PDF Rendering and Bounding Box Area */}
-        {/* Render Document container as soon as fileUrl is available and not loading analysis */} 
+        {/* Render Document container as soon as fileUrl is available and not loading analysis */}
         {fileUrl && !isLoading && (
-          <div className="mt-8 border rounded-lg shadow-sm pdf-container bg-gray-200 p-4">
+          <div className="mt-8 border rounded-lg shadow-sm pdf-container bg-gray-200 p-4 mx-auto">
             <div className="flex justify-between items-center mb-4">
               {/* Adjust title based on whether analysis is done */}
-              <h2 className="text-2xl font-semibold">{analysisResult ? "Analyzed PDF" : "PDF Preview"}</h2>
+              <h2 className="text-2xl font-semibold text-gray-900">{analysisResult ? "Analyzed PDF" : "PDF Preview"}</h2>
               {usingCachedResult && <span className="text-sm text-green-600 font-medium">(Using Cached Results)</span>}
             </div>
             {/* Show analysis summary only when results are available */}
-            {analysisResult && <p className="mb-4">Found {analysisResult.length} segments across {numPages ?? '...'} pages.</p>}
+            {analysisResult && <p className="mb-4 text-gray-700">Found {analysisResult.length} segments across {numPages ?? '...'} pages.</p>}
             
             <div
               ref={containerRef}
-              className="overflow-auto border relative"
+              className="overflow-auto max-h-[80vh] border relative"
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
             >
+              {/* Re-add style to force canvas aspect ratio */}
+              <style jsx global>{`
+                .pdf-page-wrapper canvas {
+                  height: auto !important;
+                  max-width: 100%; /* Ensure it doesn't overflow */
+                }
+              `}</style>
               <Document
                 file={fileUrl}
                 onLoadSuccess={onDocumentLoadSuccess}
@@ -451,14 +431,13 @@ export default function Home() {
                   return (
                     <div
                       key={`page_container_${pageNumber}`}
-                      className="pdf-page-wrapper"
-                      data-page-number={pageNumber} // Add data attribute
+                      className="pdf-page-wrapper w-fit mx-auto max-w-5xl"
+                      data-page-number={pageNumber}
                       style={{ position: 'relative', marginBottom: '1rem' }}
                     >
                       <Page
                         key={`page_${pageNumber}`}
                         pageNumber={pageNumber}
-                        width={containerWidth ? containerWidth : undefined} // Restore width prop
                       />
                       {/* Overlay Bounding boxes only if analysisResult is available */}
                       {analysisResult && analysisResult
