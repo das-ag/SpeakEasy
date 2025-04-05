@@ -57,4 +57,7 @@ MANIFEST
 dmypy.json
 
 # Instance Folder - Flask/Django etc
-instance/ 
+instance/
+
+# # Huridocs analysis output cache
+# huridocs_output/ 
