@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import axios from 'axios'; // Import axios
+import axios from 'axios';
 
 // Define the expected structure for the Huridocs response
 interface SegmentBox {
@@ -14,13 +14,20 @@ interface SegmentBox {
   type: string;
 }
 
+// Define the URL for your Flask backend
+const BACKEND_URL = 'http://localhost:5001/analyze'; // Ensure this is correct
+
 export async function POST(request: NextRequest) {
-  const requestTimeout = 240000; // 240 seconds timeout (4 minutes)
+  // Optional: Keep a client-side timeout if desired, but backend handles huridocs timeout
+  // const requestTimeout = 240000; 
 
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
-    const fastMode = formData.get('fast') === 'true';
+    // Note: The 'fast' parameter is no longer directly used here,
+    // as the backend doesn't currently support it. 
+    // If needed, the backend API would have to be updated to accept and forward it.
+    // const fastMode = formData.get('fast') === 'true';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -30,53 +37,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid file type. Only PDFs are accepted.' }, { status: 400 });
     }
 
-    // Prepare form data for axios
-    const huridocsFormData = new FormData();
+    // Prepare FormData to send to the Flask backend
+    // The backend expects a field named 'file'
+    const backendFormData = new FormData();
+    backendFormData.append('file', file, file.name);
 
-    // Convert the File (Blob) to a Buffer for axios, including the filename
-    // This is often necessary when forwarding files server-side with FormData
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
-    huridocsFormData.append('file', new Blob([fileBuffer]), file.name);
+    console.log(`Forwarding analysis request for ${file.name} to backend: ${BACKEND_URL}`);
 
-    if (fastMode) {
-      huridocsFormData.append('fast', 'true');
-    }
-
-    const huridocsUrl = 'http://127.0.0.1:5060';
-
-    console.log(`Forwarding request to Huridocs via axios at ${huridocsUrl} ${fastMode ? 'with fast=true' : ''} (Timeout: ${requestTimeout / 1000}s)`);
-
-    // Use axios to make the request
-    const huridocsResponse = await axios.post<SegmentBox[]>(huridocsUrl, huridocsFormData, {
+    // Use axios to send the file to the Flask backend
+    const backendResponse = await axios.post<SegmentBox[]>(BACKEND_URL, backendFormData, {
       headers: {
-        // Let axios set the Content-Type header with the correct boundary for FormData
-        // 'Content-Type': 'multipart/form-data', // This might be needed depending on axios version/behavior
+        // Let axios set the Content-Type for FormData
       },
-      // Max content length might need adjustment for large PDFs
-      // maxBodyLength: Infinity,
-      // maxContentLength: Infinity,
+      // Consider backend timeout is primary, but keep a safety timeout?
+      // timeout: requestTimeout,
     });
 
-    console.log(`Huridocs response status (axios): ${huridocsResponse.status}`);
+    console.log(`Backend response status: ${backendResponse.status}`);
 
-    // axios throws an error for non-2xx responses, so no need to check huridocsResponse.ok
-
-    // Return the successful analysis result from axios response data
-    return NextResponse.json(huridocsResponse.data);
+    // Return the successful analysis result from the backend response
+    return NextResponse.json(backendResponse.data);
 
   } catch (error) {
-    console.error('Error in /api/analyze:', error);
+    console.error('Error calling backend analysis API:', error);
 
-    let errorMessage = 'An unexpected error occurred';
+    let errorMessage = 'An unexpected error occurred while calling the backend';
     let statusCode = 500;
 
     if (axios.isAxiosError(error)) {
-      console.error('Axios error details:', error.response?.data);
+      // Log the detailed error from the backend if available
+      console.error('Backend Axios error details:', error.response?.data);
+      // Prefer the error message from the backend response
       errorMessage = error.response?.data?.error || error.response?.data?.detail || error.message;
-      statusCode = error.response?.status || 500;
+      // Use the status code from the backend response
+      statusCode = error.response?.status || 503; // Use 503 Service Unavailable if status is missing
 
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = `Request to backend service timed out after ${requestTimeout / 1000} seconds.`;
+      if (error.code === 'ECONNREFUSED') {
+          errorMessage = 'Connection refused. Is the backend server running?';
+          statusCode = 503;
+      } else if (error.code === 'ECONNABORTED' || statusCode === 504) {
+        errorMessage = 'Request to backend service timed out.';
         statusCode = 504; // Gateway Timeout
       }
     } else if (error instanceof Error) {
