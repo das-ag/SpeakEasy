@@ -68,7 +68,8 @@ def analyze_pdf():
             # 3. If not in any cache, call Huridocs
             print(f"Cache miss for hash: {pdf_hash[:8]}... Calling Huridocs.")
             files_for_huridocs = {'file': (file.filename, pdf_content, 'application/pdf')}
-            response = requests.post(HURIDOCS_URL, files=files_for_huridocs, timeout=180)
+            # Increase timeout to 1 hour (3600 seconds) for potentially long analyses
+            response = requests.post(HURIDOCS_URL, files=files_for_huridocs, timeout=3600)
             response.raise_for_status()
             analysis_result = response.json()
 
