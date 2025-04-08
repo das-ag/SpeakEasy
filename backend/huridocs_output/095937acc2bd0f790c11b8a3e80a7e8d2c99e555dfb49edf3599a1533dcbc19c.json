@@ -1,0 +1,101 @@
+[
+  {
+    "left": 183.0,
+    "top": 75.0,
+    "width": 248.0,
+    "height": 18.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "Document Big Centered Title",
+    "type": "Section header"
+  },
+  {
+    "left": 71.0,
+    "top": 151.0,
+    "width": 465.0,
+    "height": 95.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "Some text. Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+    "type": "Text"
+  },
+  {
+    "left": 72.0,
+    "top": 290.0,
+    "width": 42.0,
+    "height": 10.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "List Title",
+    "type": "Section header"
+  },
+  {
+    "left": 89.0,
+    "top": 316.0,
+    "width": 71.0,
+    "height": 13.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "",
+    "type": "List item"
+  },
+  {
+    "left": 89.0,
+    "top": 329.0,
+    "width": 77.0,
+    "height": 13.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "\u25cf FORMULA \u25cf FOOTNOTE",
+    "type": "List item"
+  },
+  {
+    "left": 90.0,
+    "top": 344.0,
+    "width": 43.0,
+    "height": 13.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "",
+    "type": "List item"
+  },
+  {
+    "left": 89.0,
+    "top": 357.0,
+    "width": 62.0,
+    "height": 27.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "\u25cf LIST \u25cf TABLE \u25cf FIGURE",
+    "type": "List item"
+  },
+  {
+    "left": 90.0,
+    "top": 384.0,
+    "width": 48.0,
+    "height": 14.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "\u25cf TITLE",
+    "type": "List item"
+  },
+  {
+    "left": 89.0,
+    "top": 398.0,
+    "width": 46.0,
+    "height": 13.0,
+    "page_number": 1,
+    "page_width": 612,
+    "page_height": 792,
+    "text": "\u25cf TEXT",
+    "type": "List item"
+  }
+]

@@ -42,8 +42,8 @@ const getTypeColor = (type: string): string => {
 };
 
 // localStorage keys
-const LS_RESULT_PREFIX = 'speakeasy_analysis_result_';
-const LS_NUMPAGES_PREFIX = 'speakeasy_num_pages_'; // Removed as numPages is no longer cached
+// REMOVED: const LS_RESULT_PREFIX = 'speakeasy_analysis_result_';
+// REMOVED: const LS_NUMPAGES_PREFIX = 'speakeasy_num_pages_'; // Removed as numPages is no longer cached
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -53,7 +53,6 @@ export default function Home() {
   const [analysisResult, setAnalysisResult] = useState<SegmentBox[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [usingCachedResult, setUsingCachedResult] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null); // Ref for the container div
   const [hoveredBox, setHoveredBox] = useState<SegmentBox | null>(null); // Store the box object
 
@@ -97,34 +96,11 @@ export default function Home() {
       setAnalysisResult(null);
       setError(null);
       setNumPages(null);
-      setUsingCachedResult(false);
       if (fileUrl) {
         URL.revokeObjectURL(fileUrl);
       }
       const newFileUrl = URL.createObjectURL(selectedFile);
       setFileUrl(newFileUrl);
-
-      // Check localStorage for cached results
-      const resultCacheKey = `${LS_RESULT_PREFIX}${currentFileName}`;
-      console.log(`Checking cache with key: ${resultCacheKey}`); // Log retrieval key
-
-      const cachedResultStr = localStorage.getItem(resultCacheKey);
-
-      // Load from cache if ONLY the result string is found
-      if (cachedResultStr) { 
-        console.log(`Found cached result for ${currentFileName}`);
-        try {
-          const cachedResult: SegmentBox[] = JSON.parse(cachedResultStr);
-          setAnalysisResult(cachedResult);
-          setUsingCachedResult(true);
-        } catch (e) {
-          console.error("Failed to parse cached results:", e);
-          // Clear potentially corrupted cache
-          localStorage.removeItem(resultCacheKey);
-        }
-      } else {
-        console.log(`No cached results found for ${currentFileName}`);
-      }
     }
   };
 
@@ -137,12 +113,8 @@ export default function Home() {
 
     setIsLoading(true);
     setError(null);
-    // Keep existing analysisResult if using cache, otherwise clear it
-    if (!usingCachedResult) {
-        setAnalysisResult(null);
-    }
-    // Keep numPages if using cache, it will be set by react-pdf later if not
-    setUsingCachedResult(false); // Reset cache flag on new analysis attempt
+    // Clear previous results before new analysis
+    setAnalysisResult(null);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -161,15 +133,7 @@ export default function Home() {
 
       const result: SegmentBox[] = await response.json();
       setAnalysisResult(result);
-      console.log(`Analysis successful for ${fileName}. Saving results to localStorage.`);
-
-      // Save successful result to localStorage
-      // Note: numPages will be set by onDocumentLoadSuccess after rendering
-      // We need to save it there or refetch it if needed.
-      // Let's save the result here, and handle numPages saving in onDocumentLoadSuccess
-      const resultSaveKey = `${LS_RESULT_PREFIX}${fileName}`;
-      console.log(`Attempting to save result to cache with key: ${resultSaveKey}`); // Log save key
-      localStorage.setItem(resultSaveKey, JSON.stringify(result));
+      console.log(`Analysis successful for ${fileName}.`);
 
     } catch (err) {
       console.error("Analysis error:", err);
@@ -186,31 +150,7 @@ export default function Home() {
   // Callback for react-pdf Document load success
   function onDocumentLoadSuccess({ numPages: nextNumPages }: { numPages: number }): void {
     setNumPages(nextNumPages);
-    // If analysis results exist and we have a filename, save numPages to cache
-    // Remove saving logic - numPages is determined by react-pdf on load
     
-    if (analysisResult && fileName && !usingCachedResult) { // Only save if it was a fresh analysis
-        const numPagesSaveKey = `${LS_NUMPAGES_PREFIX}${fileName}`;
-        console.log(`Attempting to save numPages (${nextNumPages}) to cache with key: ${numPagesSaveKey}`); // Log save key
-        localStorage.setItem(numPagesSaveKey, JSON.stringify(nextNumPages));
-    }
-    
-  }
-
-  // Function to clear cache for the current file
-  const clearCache = () => {
-    if (fileName) {
-        console.log(`Clearing cache for ${fileName}`);
-        const resultCacheKey = `${LS_RESULT_PREFIX}${fileName}`;
-        localStorage.removeItem(resultCacheKey);
-        // Reset state to reflect cleared cache
-        setAnalysisResult(null);
-        setNumPages(null);
-        setUsingCachedResult(false);
-        // Optionally re-select the file or prompt user
-    } else {
-        alert("No file selected to clear cache for.");
-    }
   }
 
   // Function to handle mouse movement over the PDF container
@@ -361,18 +301,8 @@ export default function Home() {
               disabled={!file || isLoading}
               className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out"
             >
-              {isLoading ? 'Analyzing...' : (usingCachedResult ? 'Re-Analyze PDF' : 'Analyze PDF')}
+              {isLoading ? 'Analyzing...' : 'Analyze PDF'}
             </button>
-            {file && (
-              <button
-                type="button"
-                onClick={clearCache}
-                title="Clear cached analysis results for this file"
-                className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm transition duration-150 ease-in-out"
-              >
-                Clear Cache
-              </button>
-            )}
           </div>
         </form>
 
@@ -397,7 +327,6 @@ export default function Home() {
             <div className="flex justify-between items-center mb-4">
               {/* Adjust title based on whether analysis is done */}
               <h2 className="text-2xl font-semibold text-gray-900">{analysisResult ? "Analyzed PDF" : "PDF Preview"}</h2>
-              {usingCachedResult && <span className="text-sm text-green-600 font-medium">(Using Cached Results)</span>}
             </div>
             {/* Show analysis summary only when results are available */}
             {analysisResult && <p className="mb-4 text-gray-700">Found {analysisResult.length} segments across {numPages ?? '...'} pages.</p>}

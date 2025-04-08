@@ -1,0 +1,63 @@
+# Python virtual environment
+.venv/
+venv/
+*.venv/
+ENV/
+env/
+*.env/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Pytest
+.pytest_cache/
+.coverage
+.hypothesis/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments - Be careful committing .env files if they contain secrets
+# .env
+
+# Type checker
+.mypy_cache/
+.pytype/
+.dmypy.json
+dmypy.json
+
+# Instance Folder - Flask/Django etc
+instance/
+
+# # Huridocs analysis output cache
+# huridocs_output/ 
