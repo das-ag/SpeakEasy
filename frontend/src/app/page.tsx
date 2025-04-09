@@ -594,13 +594,13 @@ export default function Home() {
             </div>
 
             {/* Chat Interface - Position to the right, outside of normal document flow */}
-            <div className="w-full lg:w-1/4 h-[70vh] bg-white p-4 rounded-lg shadow flex flex-col">
+            <div className="w-full lg:w-1/4 h-[50vh] bg-white p-4 rounded-lg shadow flex flex-col">
               {analysisResult && chatFileHash ? (
                 <>
-                  <h2 className="text-lg font-semibold mb-4 text-gray-800">Chat with Document</h2>
+                  <h2 className="text-lg font-semibold mb-3 text-gray-800">Chat with Document</h2>
                   
                   {/* Chat History Display */}
-                  <div className="flex-grow overflow-y-auto border border-gray-200 rounded p-3 mb-4 bg-gray-50">
+                  <div className="flex-grow overflow-y-auto border border-gray-200 rounded p-3 mb-3 bg-gray-50">
                     {chatHistory.map((msg, index) => (
                       <div key={index} className={`mb-3 ${
                           msg.sender === 'user' ? 'text-right' : 'text-left'
