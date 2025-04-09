@@ -510,6 +510,9 @@ export default function Home() {
   const startRecording = () => {
     if (recognitionRef.current && !isRecording) {
       try {
+        // Stop any ongoing speech first
+        stopReading();
+        
         setLastQueryWasVoice(true); // Set flag for voice input
         recognitionRef.current.start();
         setIsRecording(true);
