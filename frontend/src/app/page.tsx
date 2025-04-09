@@ -82,6 +82,9 @@ export default function Home() {
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [showVoiceSelector, setShowVoiceSelector] = useState<boolean>(false);
   const [speechRate, setSpeechRate] = useState<number>(1.0);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const recognitionRef = useRef<any>(null); // To hold the SpeechRecognition instance
+  const [lastQueryWasVoice, setLastQueryWasVoice] = useState<boolean>(false);
 
   // --- Chat State ---
   const [chatFileHash, setChatFileHash] = useState<string | null>(null);
@@ -156,6 +159,53 @@ export default function Home() {
         // Cleanup
         window.speechSynthesis.onvoiceschanged = null;
       };
+    }
+  }, []);
+
+  // Initialize SpeechRecognition
+  useEffect(() => {
+    console.log("Attempting to initialize SpeechRecognition...");
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      console.log("SpeechRecognition API found:", SpeechRecognition ? "Yes" : "No");
+      
+      if (SpeechRecognition) {
+        try {
+          const recognition = new SpeechRecognition();
+          console.log("Created recognition instance:", recognition);
+          
+          recognition.continuous = false; // Listen for a single utterance
+          recognition.interimResults = false; // Only get final results
+          recognition.lang = 'en-US'; // Set language
+
+          recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            console.log('Speech recognized:', transcript);
+            setChatQuery(transcript); // Update input box with recognized text
+            setIsRecording(false); // Stop recording state
+          };
+
+          recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            setError(`Speech recognition error: ${event.error}`);
+            setIsRecording(false);
+          };
+
+          recognition.onend = () => {
+            console.log('Speech recognition ended.');
+            setIsRecording(false); // Ensure recording state is off
+          };
+
+          recognitionRef.current = recognition;
+          console.log('Speech recognition initialized successfully. recognitionRef.current:', recognitionRef.current);
+        } catch (err) {
+          console.error("Error creating SpeechRecognition instance:", err);
+        }
+      } else {
+        console.warn('Speech recognition not supported by this browser.');
+      }
+    } else {
+      console.log("Window object not found, skipping SpeechRecognition init.");
     }
   }, []);
 
@@ -379,48 +429,37 @@ export default function Home() {
     setHoveredBox(null);
   };
 
-  const handleChatSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!chatQuery.trim() || !chatFileHash || isChatLoading) {
-        return; // Don't submit empty queries or while loading
+  // Reusable function to send a chat message and handle the response
+  const sendChatMessage = async (queryText: string) => {
+    if (!queryText.trim() || !chatFileHash || isChatLoading) {
+      return; // Don't submit empty queries or while loading/no hash
     }
 
     const userMessage: ChatMessage = { 
       sender: 'user', 
-      text: chatQuery,
-      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // Add unique ID
+      text: queryText,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` 
     };
     setChatHistory(prev => [...prev, userMessage]);
-    setChatQuery(""); // Clear input immediately
+    setChatQuery(""); // Clear input box after sending
     setIsChatLoading(true);
     setChatError(null);
 
     try {
-        console.log(`Sending chat query for hash ${chatFileHash.substring(0,8)}...: ${userMessage.text}`);
-        // *** USE THE CORRECT BACKEND API URL HERE ***
-        const chatApiUrl = `/api/chat/${chatFileHash}`; 
-        // Or use full URL: const chatApiUrl = `http://localhost:5001/api/chat/${chatFileHash}`;
+        console.log(`Sending chat query for hash ${chatFileHash.substring(0,8)}...: ${queryText}`);
+        const chatApiUrl = `/api/chat/${chatFileHash}`;
 
-        const response = await fetch(chatApiUrl, { // Use configured URL
+        const response = await fetch(chatApiUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ query: userMessage.text }),
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ query: queryText }),
         });
 
         if (!response.ok) {
-            // Read the body ONCE as text first
             const errorText = await response.text();
             let errorMsg = `Chat API error! status: ${response.status}`;
-             try {
-                // Try to parse the text as JSON
-                const errorData = JSON.parse(errorText);
-                errorMsg = errorData.error || errorMsg;
-            } catch (parseError) { 
-                 // If parsing fails, use the raw text (it might not be JSON)
-                 errorMsg = errorText || errorMsg; 
-            }
+            try { errorData = JSON.parse(errorText); errorMsg = errorData.error || errorMsg; } 
+            catch (parseError) { errorMsg = errorText || errorMsg; }
             throw new Error(errorMsg);
         }
 
@@ -430,37 +469,66 @@ export default function Home() {
         const botMessage: ChatMessage = {
             sender: 'bot',
             text: result.response,
-            sources: result.sources, // Include sources if available
-            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // Add unique ID
+            sources: result.sources,
+            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
         };
         setChatHistory(prev => [...prev, botMessage]);
+
+        // Auto-read response if the query was made by voice
+        if (lastQueryWasVoice) {
+          console.log("Last query was voice, attempting to read bot response.");
+          handleChatMessageClick(botMessage); // Read the new bot message
+          setLastQueryWasVoice(false); // Reset the flag
+        }
 
     } catch (err) {
         console.error("Chat error:", err);
         const errorText = err instanceof Error ? err.message : "An unknown error occurred during chat.";
         setChatError(errorText);
-        // Optionally add an error message to chat history
         setChatHistory(prev => [...prev, {
           sender: 'bot', 
           text: `Error: ${errorText}`,
-          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // Add unique ID
+          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
         }]);
     } finally {
         setIsChatLoading(false);
+        // Ensure voice flag is reset even if auto-read didn't trigger or failed
+        if (lastQueryWasVoice) {
+            setLastQueryWasVoice(false);
+        } 
     }
   };
 
-  // Toggle source expansion for a specific message
-  const toggleSourceExpansion = (messageId: string) => {
-    setExpandedSources(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(messageId)) {
-        newSet.delete(messageId);
-      } else {
-        newSet.add(messageId);
+  // Original form submission handler - now just calls sendChatMessage
+  const handleChatSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLastQueryWasVoice(false); // Ensure flag is false for manual submission
+    sendChatMessage(chatQuery);
+  };
+
+  // Function to start speech recognition
+  const startRecording = () => {
+    if (recognitionRef.current && !isRecording) {
+      try {
+        setLastQueryWasVoice(true); // Set flag for voice input
+        recognitionRef.current.start();
+        setIsRecording(true);
+        console.log('Speech recognition started.');
+      } catch (error) {
+        console.error('Error starting speech recognition:', error);
+        setError('Could not start voice recognition.');
+        setLastQueryWasVoice(false); // Reset flag on error
       }
-      return newSet;
-    });
+    }
+  };
+
+  // Function to stop speech recognition (usually automatic, but can be manual)
+  const stopRecordingManually = () => {
+    if (recognitionRef.current && isRecording) {
+      recognitionRef.current.stop();
+      // onend handler will set isRecording to false
+      console.log('Speech recognition stopped manually.');
+    }
   };
 
   // Function to toggle voice selector
@@ -552,16 +620,6 @@ export default function Home() {
     }
   };
 
-  // Function to stop any active text-to-speech
-  const stopReading = () => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      setIsReading(false);
-      setClickedBox(null);
-      setShowToast(false);
-    }
-  };
-
   // Function to handle click on a chat message (works for user and bot)
   const handleChatMessageClick = (message: ChatMessage) => {
     // Only read messages with text
@@ -619,6 +677,33 @@ export default function Home() {
       console.error("Error in chat speech synthesis:", error);
       setIsReading(false);
       setShowToast(false);
+    }
+  };
+
+  // Update SpeechRecognition onresult to call sendChatMessage
+  useEffect(() => {
+    // ... existing initialization ...
+    if (recognitionRef.current) {
+      recognitionRef.current.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('Speech recognized:', transcript);
+        // Don't update chatQuery here, directly send the message
+        // setChatQuery(transcript);
+        setIsRecording(false); // Stop recording state
+        sendChatMessage(transcript); // Auto-send the message
+      };
+    }
+    // ... rest of useEffect ...
+  }, [chatFileHash, isChatLoading, lastQueryWasVoice, selectedVoice, speechRate]); // Add dependencies
+
+  // Function to stop any active text-to-speech
+  const stopReading = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      // Reset state related to reading
+      setIsReading(false);
+      setClickedBox(null); 
+      setShowToast(false); 
     }
   };
 
@@ -934,13 +1019,34 @@ export default function Home() {
                       onChange={(e) => setChatQuery(e.target.value)}
                       placeholder="Ask a question..."
                       className="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
-                      disabled={isChatLoading}
+                      disabled={isChatLoading || isRecording}
                       required
                     />
+                    {/* Microphone Button */}
+                    <button
+                      type="button"
+                      onClick={isRecording ? stopRecordingManually : startRecording}
+                      disabled={!recognitionRef.current || isChatLoading}
+                      title={isRecording ? "Stop Recording" : "Record Question"}
+                      className={`p-2 rounded focus:outline-none focus:shadow-outline mr-2 transition-colors duration-200 ${ 
+                        isRecording 
+                          ? 'bg-red-500 hover:bg-red-700 text-white' 
+                          : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                      } ${!recognitionRef.current ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <svg 
+                        className={`w-5 h-5 ${isRecording ? 'animate-pulse' : ''}`} 
+                        fill="currentColor" 
+                        viewBox="0 0 20 20" 
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8h-1a6 6 0 11-12 0H3a7.001 7.001 0 006 6.93V17H7v1h6v-1h-2v-2.07z" clipRule="evenodd" />
+                      </svg>
+                    </button>
                     <button
                       type="submit"
                       disabled={isChatLoading || !chatQuery.trim()}
-                      className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                      className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${ 
                         isChatLoading || !chatQuery.trim() ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
