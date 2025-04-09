@@ -128,6 +128,9 @@ export default function Home() {
   // Add a new state variable for summary search
   const [summarySearchQuery, setSummarySearchQuery] = useState<string>("");
 
+  // New state variable for total segments estimate
+  const [totalSegmentsEstimate, setTotalSegmentsEstimate] = useState<number>(0);
+
   // Configure worker on component mount
   useEffect(() => {
     // pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`; // Moved below
@@ -797,15 +800,20 @@ export default function Home() {
       console.log("Summaries fetched:", result);
       
       if (result.summaries) {
+        // Count the number of summaries we've received
+        const summaryCount = Object.keys(result.summaries).length;
+        
         // Always update summaries with the latest data
         setSummaries(result.summaries);
         
-        // Always update the count message if we have partial results
-        if (result.is_partial) {
-          const countMessage = `Loading summaries: ${Object.keys(result.summaries).length} segments processed so far...`;
-          setSummaryError(countMessage);
-          console.log(countMessage);
-        }
+        // Always update the count message if we have summaries
+        const statusMessage = result.is_partial 
+          ? `Loading summaries: ${summaryCount} segments processed so far...` 
+          : `Completed: ${summaryCount} segments processed.`;
+        
+        // Update the UI with the status message
+        setSummaryError(result.is_partial ? statusMessage : null);
+        console.log(statusMessage);
         
         // Don't automatically show summaries when generated
         // setShowSummaries(true);
@@ -820,8 +828,6 @@ export default function Home() {
           }, 5000);
         } else if (result.status === 'failed') {
           setSummaryError(`Generation incomplete: ${result.error || 'Unknown error'}`);
-        } else {
-          setSummaryError(null);
         }
       } else {
         throw new Error("No summaries returned from the server");
@@ -830,16 +836,37 @@ export default function Home() {
       console.error("Error fetching summaries:", error);
       setSummaryError(error instanceof Error ? error.message : "Unknown error fetching summaries");
     } finally {
-      setIsSummaryLoading(false);
+      if (!getPartial) {
+        setIsSummaryLoading(false);
+      }
     }
   };
 
   // Add this function to get initial partial results quickly and resume generation
   const startSummaryGeneration = async () => {
+    // Estimate total segments from the analysis result
+    if (analysisResult) {
+      // Count text elements in the analysis result
+      const textElements = analysisResult.filter(box => 
+        box.text && box.text.trim().length > 10
+      );
+      const estimate = Math.max(340, textElements.length); // Use 340 as minimum (from backend logs)
+      setTotalSegmentsEstimate(estimate);
+      console.log(`Estimated ${estimate} total segments for summarization`);
+    }
+    
     // First check for partial results
     await fetchSummaries(true);
     // Then request full generation with resume=true to continue from where it left off
     await fetchSummaries(false, true);
+  };
+
+  // Update the progress bar to use the estimated total segments
+  const getProgressPercentage = () => {
+    if (!summaries) return 0;
+    const count = Object.keys(summaries).length;
+    const total = totalSegmentsEstimate > 0 ? totalSegmentsEstimate : 340; // Fallback to 340 if no estimate
+    return Math.min(100, (count / total) * 100);
   };
 
   // Function to handle clicking on a summary
@@ -1075,36 +1102,66 @@ export default function Home() {
           <div className="w-full flex flex-col lg:flex-row gap-6">
             {/* Metadata Panel - Slightly reduce width */}
             <div className="w-full lg:w-1/6 h-[70vh] bg-white p-4 rounded-lg shadow-md border border-gray-200 flex flex-col overflow-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold text-gray-900">Document Elements</h2>
+              {/* Document Elements section with proper header hierarchy */}
+              <div className="section mb-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-4">Document Elements</h2>
+                
                 {chatFileHash && (
-                  <button
-                    onClick={startSummaryGeneration}
-                    className={`px-2 py-1 text-xs rounded transition-colors ${
-                      isSummaryLoading 
-                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed' 
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                    disabled={isSummaryLoading}
-                    title="Generate summaries for document elements"
-                  >
-                    {showSummaries ? 'Refresh Summaries' : 'Generate Summaries'}
-                  </button>
+                  <div>
+                    <button
+                      onClick={startSummaryGeneration}
+                      disabled={isSummaryLoading}
+                      className={`px-3 py-1.5 rounded text-white font-medium text-sm flex items-center ${
+                        isSummaryLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      {isSummaryLoading ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Generating...
+                        </>
+                      ) : summaries && Object.keys(summaries).length > 0 ? (
+                        "Refresh Summaries"
+                      ) : (
+                        "Generate Summaries"
+                      )}
+                    </button>
+                    
+                    {summaryError && (
+                      <div className="mt-2">
+                        {summaryError.startsWith('Loading summaries:') ? (
+                          <div className="text-blue-700 text-sm flex flex-col">
+                            <div className="flex items-center">
+                              {summaryError}
+                            </div>
+                            {summaries && (
+                              <div className="mt-1 w-full bg-gray-200 rounded-full h-1.5">
+                                <div 
+                                  className="bg-blue-600 h-1.5 rounded-full transition-all duration-500 ease-out" 
+                                  style={{ 
+                                    width: `${getProgressPercentage()}%` 
+                                  }}
+                                ></div>
+                              </div>
+                            )}
+                            <div className="text-xs text-gray-600 mt-0.5">
+                              {Object.keys(summaries || {}).length} of ~{totalSegmentsEstimate || 340} segments
+                            </div>
+                          </div>
+                        ) : (
+                          // Only show actual errors, not loading states
+                          !summaryError.includes("Loading") && !summaryError.includes("loading") ? (
+                            <div className="text-red-500 text-sm">{summaryError}</div>
+                          ) : null
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              
-              {isSummaryLoading && (
-                <div className="flex items-center justify-center mb-3">
-                  <div className="animate-pulse h-4 w-4 bg-blue-500 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-500">Generating summaries...</span>
-                </div>
-              )}
-              
-              {summaryError && (
-                <div className="mb-3 p-2 bg-red-100 text-red-700 rounded text-xs">
-                  {summaryError}
-                </div>
-              )}
               
               {/* Add a toggle for showing all summaries */}
               {summaries && Object.keys(summaries).length > 0 && (
