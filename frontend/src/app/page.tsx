@@ -79,6 +79,7 @@ export default function Home() {
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [showVoiceSelector, setShowVoiceSelector] = useState<boolean>(false);
+  const [speechRate, setSpeechRate] = useState<number>(1.0);
 
   // --- Chat State ---
   const [chatFileHash, setChatFileHash] = useState<string | null>(null);
@@ -494,6 +495,10 @@ export default function Home() {
           utterance.voice = selectedVoice;
           console.log('Using voice:', selectedVoice.name);
         }
+        
+        // Apply speech rate
+        utterance.rate = speechRate;
+        console.log('Using speech rate:', speechRate);
         
         // Set reading state to true
         setIsReading(true);
@@ -923,6 +928,27 @@ export default function Home() {
                       </div>
                     )}
                   </div>
+                  
+                  {/* Reading Speed Control */}
+                  <div className="mt-3 border-t border-gray-200 pt-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-sm font-medium text-gray-700">Reading Speed:</span>
+                      <span className="text-xs font-medium text-gray-700">{speechRate.toFixed(1)}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.1"
+                      value={speechRate}
+                      onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Slower</span>
+                      <span>Faster</span>
+                    </div>
+                  </div>
                 </>
               ) : (
                 <>
@@ -932,70 +958,6 @@ export default function Home() {
                     </svg>
                     <p className="text-sm mb-2">Chat will appear here</p>
                     <p className="text-xs">Click "Analyze Document" to enable chat</p>
-                  </div>
-                  
-                  {/* Voice Selection - Always visible even without chat */}
-                  <div className="mt-auto border-t border-gray-200 pt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">Text-to-Speech Voice:</span>
-                      <div className="relative">
-                        <button
-                          className="text-sm bg-blue-600 text-white px-3 py-1 rounded shadow-sm hover:bg-blue-700 transition-colors duration-200 flex items-center"
-                          onClick={toggleVoiceSelector}
-                          title="Change voice"
-                        >
-                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
-                          </svg>
-                          {selectedVoice ? selectedVoice.name.split(' ').slice(0, 2).join(' ') : 'Select Voice'}
-                        </button>
-                        
-                        {/* Voice Selector Dropdown */}
-                        {showVoiceSelector && (
-                          <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl z-50 w-64 p-3 border border-gray-200">
-                            <div className="flex justify-between items-center mb-2">
-                              <h3 className="font-medium text-gray-800">Select Voice</h3>
-                              <button 
-                                onClick={() => setShowVoiceSelector(false)}
-                                className="text-gray-500 hover:text-gray-700"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                                </svg>
-                              </button>
-                            </div>
-                            
-                            {availableVoices.length > 0 ? (
-                              <div className="max-h-64 overflow-y-auto">
-                                {availableVoices
-                                  .filter(voice => voice.lang.startsWith('en'))
-                                  .map((voice, index) => (
-                                  <div 
-                                    key={`${voice.name}-${index}`}
-                                    className={`p-2 cursor-pointer hover:bg-gray-100 rounded ${selectedVoice === voice ? 'bg-blue-100' : ''}`}
-                                    onClick={() => {
-                                      setSelectedVoice(voice);
-                                      setShowVoiceSelector(false);
-                                      console.log('Voice selected:', voice.name);
-                                    }}
-                                  >
-                                    <div className="font-medium text-gray-900">{voice.name}</div>
-                                    <div className="text-xs text-gray-700 font-medium">{voice.lang} {voice.default ? '(Default)' : ''}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-700">No voices available</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {selectedVoice && (
-                      <div className="mt-1 text-xs text-gray-500">
-                        Current: {selectedVoice.name} ({selectedVoice.lang})
-                      </div>
-                    )}
                   </div>
                 </>
               )}
