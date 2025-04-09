@@ -135,6 +135,8 @@ export default function Home() {
       }
       const newFileUrl = URL.createObjectURL(selectedFile);
       setFileUrl(newFileUrl);
+      
+      console.log("File changed:", { fileName: currentFileName, fileUrl: newFileUrl });
     }
   };
 
@@ -207,8 +209,8 @@ export default function Home() {
 
   // Callback for react-pdf Document load success
   function onDocumentLoadSuccess({ numPages: nextNumPages }: { numPages: number }): void {
+    console.log(`PDF loaded successfully with ${nextNumPages} pages`);
     setNumPages(nextNumPages);
-    
   }
 
   // Function to handle mouse movement over the PDF container
@@ -396,240 +398,194 @@ export default function Home() {
   };
 
   return (
-    <div className="container mx-auto p-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">SpeakEasy PDF Analyzer</h1>
-        <p className="text-gray-600">Upload a PDF to analyze its layout and content structure.</p>
-      </header>
+    <main className="flex min-h-screen flex-col items-center p-4 md:p-8 lg:p-12 bg-gray-50">
+      {/* Debug state display - remove after fixing */}
+      <div className="fixed bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs p-2 rounded z-50">
+        <p>Debug: File: {fileName ? "✅" : "❌"}, FileURL: {fileUrl ? "✅" : "❌"}, Pages: {numPages || "None"}</p>
+      </div>
+      
+      <h1 className="text-2xl md:text-3xl font-bold mb-6 text-gray-800">SpeakEasy Document Analyzer & Chat</h1>
 
-      <main>
-        <form onSubmit={handleSubmit} className="mb-8 p-6 border rounded-lg shadow-sm bg-white">
-          <div className="mb-4">
-            <label htmlFor="pdf-upload" className="block text-sm font-medium text-gray-700 mb-2">
-              Choose PDF File
-            </label>
-            <input
-              id="pdf-upload"
-              type="file"
-              accept=".pdf"
-              onChange={handleFileChange}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              type="submit"
-              disabled={!file || isLoading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out"
+      {/* --- File Upload Form --- */}
+      <form onSubmit={handleSubmit} className="w-full max-w-lg bg-white p-6 rounded-lg shadow mb-8">
+        <div className="mb-4">
+          <label htmlFor="pdf-upload" className="block text-gray-700 text-sm font-bold mb-2">
+            Upload PDF Document:
+          </label>
+          <input
+            id="pdf-upload"
+            type="file"
+            accept=".pdf"
+            onChange={handleFileChange}
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            required
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={isLoading || !file}
+          className={`w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+            isLoading || !file ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+        >
+          {isLoading ? 'Analyzing...' : 'Analyze Document'}
+        </button>
+        {error && <p className="text-red-500 text-xs italic mt-4">Error: {error}</p>}
+      </form>
+
+      {/* --- PDF Viewer --- */}
+      {fileUrl ? (
+        <div className="w-full flex flex-col lg:flex-row gap-6 max-w-7xl">
+          {/* PDF Section */}
+          <div 
+            ref={containerRef}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            className={`w-full ${analysisResult ? 'lg:w-3/5' : 'lg:w-full'} h-[70vh] overflow-auto border border-gray-300 rounded-lg shadow bg-white relative`}
+          >
+            <Document
+              file={fileUrl}
+              onLoadSuccess={onDocumentLoadSuccess}
+              onLoadError={(err) => {
+                console.error("PDF load error:", err);
+                setError(`Failed to load PDF: ${err.message}`);
+              }}
+              loading={<div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-700"></div><span className="ml-3">Loading PDF...</span></div>}
             >
-              {isLoading ? 'Analyzing...' : 'Analyze PDF'}
-            </button>
-          </div>
-        </form>
-
-        {isLoading && (
-          <div className="flex justify-center items-center my-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="ml-3 text-gray-600">Processing PDF, please wait...</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
-            <strong className="font-bold">Error:</strong>
-            <span className="block sm:inline"> {error}</span>
-          </div>
-        )}
-
-        {/* PDF Rendering and Bounding Box Area */}
-        {/* Render Document container as soon as fileUrl is available and not loading analysis */}
-        {fileUrl && !isLoading && (
-          <div className="mt-8 border rounded-lg shadow-sm pdf-container bg-gray-200 p-4 mx-auto">
-            <div className="flex justify-between items-center mb-4">
-              {/* Adjust title based on whether analysis is done */}
-              <h2 className="text-2xl font-semibold text-gray-900">{analysisResult ? "Analyzed PDF" : "PDF Preview"}</h2>
-            </div>
-            {/* Show analysis summary only when results are available */}
-            {analysisResult && <p className="mb-4 text-gray-700">Found {analysisResult.length} segments across {numPages ?? '...'} pages.</p>}
-            
-            <div
-              ref={containerRef}
-              className="overflow-auto max-h-[80vh] border relative"
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-            >
-              {/* Re-add style to force canvas aspect ratio */}
-              <style jsx global>{`
-                .pdf-page-wrapper canvas {
-                  height: auto !important;
-                  max-width: 100%; /* Ensure it doesn't overflow */
-                }
-              `}</style>
-              <Document
-                file={fileUrl}
-                onLoadSuccess={onDocumentLoadSuccess}
-                onLoadError={(err) => {
-                  console.error("PDF Load error:", err);
-                  setError(`Failed to load PDF: ${err.message}`);
-                  setFileUrl(null); // Clear URL on load error
-                }}
-                loading="Loading PDF Preview..."
-              >
-                {/* Render pages only when numPages is known */}
-                {numPages && Array.from(new Array(numPages), (el, index) => {
-                  const pageNumber = index + 1;
-                  return (
-                    <div
-                      key={`page_container_${pageNumber}`}
-                      className="pdf-page-wrapper w-fit mx-auto max-w-5xl"
-                      data-page-number={pageNumber}
-                      style={{ position: 'relative', marginBottom: '1rem' }}
-                    >
-                      <Page
-                        key={`page_${pageNumber}`}
-                        pageNumber={pageNumber}
-                      />
-                      {/* Overlay Bounding boxes only if analysisResult is available */}
-                      {analysisResult && analysisResult
-                        .filter(box => box.page_number === pageNumber)
-                        .map((box, boxIndex) => {
-                          // Use the same unique key generation as in handleMouseMove
-                          // Compare actual box object with the one in state
-                          const isHovered = hoveredBox === box;
-
-                          const leftPercent = (box.left / box.page_width) * 100;
-                          const topPercent = (box.top / box.page_height) * 100;
-                          const widthPercent = (box.width / box.page_width) * 100;
-                          const heightPercent = (box.height / box.page_height) * 100;
-
-                          return (
-                            <div
-                              key={`render_box_${pageNumber}_${boxIndex}`} // Use map index for stable React key
-                              title={`${box.type}: ${box.text.substring(0, 100)}...`}
-                              style={{
-                                position: 'absolute',
-                                left: `${leftPercent}%`,
-                                top: `${topPercent}%`,
-                                width: `${widthPercent}%`,
-                                height: `${heightPercent}%`,
-                                border: `2px solid ${getTypeColor(box.type).replace('0.2', '1.0')}`,
-                                backgroundColor: getTypeColor(box.type),
-                                boxSizing: 'border-box',
-                                pointerEvents: 'none', // Keep this active
-                                transition: 'filter 0.15s ease-in-out, transform 0.15s ease-in-out', // Add transform transition
-                                filter: isHovered ? 'brightness(125%)' : 'brightness(100%)', // Apply brightness
-                                transform: isHovered ? 'scale(1.02)' : 'scale(1)', // RE-ADD scale
-                                transformOrigin: 'center center', // Ensure scaling originates from the center
-                                zIndex: isHovered ? 10 : 1, // Bring hovered box slightly forward
-                              }}
-                            >
-                              <span style={{
-                                position: 'absolute',
-                                top: '-18px',
-                                left: '0',
-                                backgroundColor: getTypeColor(box.type).replace('0.2', '0.8'),
-                                color: 'white',
-                                padding: '1px 3px',
-                                fontSize: '10px',
-                                whiteSpace: 'nowrap',
-                                zIndex: 1,
-                                // pointerEvents: 'none', // Label should also be non-interactive
-                              }}>
-                                {box.type}
-                              </span>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  );
-                })}
-              </Document>
-            </div>
-          </div>
-        )}
-
-        {/* --- Chat Interface --- */}
-        {analysisResult && chatFileHash && (
-          <div className="w-full max-w-2xl mt-8 bg-white p-4 rounded-lg shadow">
-            <h2 className="text-xl font-semibold mb-4 text-gray-800">Chat with Document ({fileName})</h2>
-            
-            {/* Chat History Display */}
-            <div className="h-64 overflow-y-auto border border-gray-200 rounded p-3 mb-4 bg-gray-50">
-              {chatHistory.map((msg, index) => (
-                <div key={index} className={`mb-3 ${
-                    msg.sender === 'user' ? 'text-right' : 'text-left'
-                  }`}>
-                  <span className={`inline-block p-2 rounded-lg ${
-                      msg.sender === 'user' 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-200 text-gray-800'
-                    }`}>
-                    {msg.text}
-                    {/* Optional: Display sources for bot messages */}
-                    {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-gray-300 text-xs text-left">
-                        <p className="font-semibold mb-1">Sources:</p>
-                        <ul>
-                          {msg.sources.map((source, s_idx) => (
-                             <li key={s_idx} title={JSON.stringify(source.metadata)} className="mb-1 p-1 bg-gray-100 rounded truncate hover:whitespace-normal">
-                                  [...{source.metadata.page_number ? `P${source.metadata.page_number}` : 'N/A'}] {source.content_preview}
-                              </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </span>
+              {numPages ? (
+                Array.from(new Array(numPages), (el, index) => (
+                  <div key={`page_wrapper_${index + 1}`} className="pdf-page-wrapper relative mb-2 border-b last:border-b-0" data-page-number={index + 1}>
+                    <Page
+                      key={`page_${index + 1}`}
+                      pageNumber={index + 1}
+                      width={containerRef.current ? containerRef.current.clientWidth * 0.98 : undefined} // Adjust width slightly for padding/border
+                      renderTextLayer={true} // Enable text layer for selection/accessibility
+                      renderAnnotationLayer={true}
+                    />
+                    {/* Render analysis boxes only if analysis results exist */}
+                    {analysisResult && analysisResult
+                      .filter(box => box.page_number === index + 1)
+                      .map((box, boxIndex) => (
+                        <div
+                          key={`box_${index + 1}_${boxIndex}`}
+                          className="absolute border border-dashed"
+                          style={{
+                            left: `${(box.left / box.page_width) * 100}%`,
+                            top: `${(box.top / box.page_height) * 100}%`,
+                            width: `${(box.width / box.page_width) * 100}%`,
+                            height: `${(box.height / box.page_height) * 100}%`,
+                            backgroundColor: getTypeColor(box.type),
+                            borderColor: getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'), // Darker border
+                            pointerEvents: 'none', // Let mouse events pass through to page
+                          }}
+                        />
+                      ))}
+                  </div>
+                ))
+              ) : (
+                <div className="flex justify-center items-center h-full">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-700"></div>
+                  <span className="ml-3">Loading PDF...</span>
                 </div>
-              ))}
-              {/* Loading indicator for chat response */}
-              {isChatLoading && (
-                  <div className="text-left mb-3">
-                       <span className="inline-block p-2 rounded-lg bg-gray-200 text-gray-500 animate-pulse">
-                          Thinking...
-                       </span>
-                  </div>
               )}
-               {/* Error display for chat */}
-              {chatError && (
-                  <div className="text-left mb-3">
-                       <span className="inline-block p-2 rounded-lg bg-red-100 text-red-700">
-                          Error: {chatError}
-                       </span>
-                  </div>
-              )}
-              {/* Dummy div to ensure scrolling to bottom */}
-              <div ref={chatEndRef} /> 
-            </div>
-
-            {/* Chat Input Form */}
-            <form onSubmit={handleChatSubmit} className="flex items-center">
-              <input
-                type="text"
-                value={chatQuery}
-                onChange={(e) => setChatQuery(e.target.value)}
-                placeholder="Ask a question about the document..."
-                className="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
-                disabled={isChatLoading}
-                required
-              />
-              <button
-                type="submit"
-                disabled={isChatLoading || !chatQuery.trim()}
-                className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
-                  isChatLoading || !chatQuery.trim() ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
+            </Document>
+            {/* Tooltip for hovered box - only visible with analysis results */}
+            {hoveredBox && (
+              <div 
+                  className="absolute bg-black text-white p-2 rounded text-xs shadow-lg z-10 pointer-events-none whitespace-pre-wrap max-w-xs"
+                  style={{ 
+                      // Position tooltip near the mouse, adjusting for container scroll
+                      left: `${(hoveredBox.left / hoveredBox.page_width * 100)}%`, // Adjust positioning as needed
+                      top: `${(hoveredBox.top / hoveredBox.page_height * 100)}%`, // Adjust positioning as needed
+                      // transform: 'translate(10px, -100%)' // Example offset
+                  }}
               >
-                Send
-              </button>
-            </form>
+                Type: {hoveredBox.type}\nText: {hoveredBox.text.substring(0, 100)}{hoveredBox.text.length > 100 ? '...' : ''}
+              </div>
+            )}
           </div>
-        )}
 
-      </main>
+          {/* --- Chat Interface --- Only shown when analysis is complete and chat hash is available */}
+          {analysisResult && chatFileHash && (
+            <div className="w-full lg:w-2/5 h-[70vh] bg-white p-4 rounded-lg shadow flex flex-col">
+              <h2 className="text-xl font-semibold mb-4 text-gray-800">Chat with {fileName}</h2>
+              
+              {/* Chat History Display - Made taller to match PDF height */}
+              <div className="flex-grow overflow-y-auto border border-gray-200 rounded p-3 mb-4 bg-gray-50">
+                {chatHistory.map((msg, index) => (
+                  <div key={index} className={`mb-3 ${
+                      msg.sender === 'user' ? 'text-right' : 'text-left'
+                    }`}>
+                    <span className={`inline-block p-2 rounded-lg ${
+                        msg.sender === 'user' 
+                        ? 'bg-blue-500 text-white' 
+                        : 'bg-gray-200 text-gray-800'
+                      }`}>
+                      {msg.text}
+                      {/* Optional: Display sources for bot messages */}
+                      {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-300 text-xs text-left">
+                          <p className="font-semibold mb-1">Sources:</p>
+                          <ul>
+                            {msg.sources.map((source, s_idx) => (
+                               <li key={s_idx} title={JSON.stringify(source.metadata)} className="mb-1 p-1 bg-gray-100 rounded truncate hover:whitespace-normal">
+                                    [...{source.metadata.page_number ? `P${source.metadata.page_number}` : 'N/A'}] {source.content_preview}
+                                </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </span>
+                  </div>
+                ))}
+                {/* Loading indicator for chat response */}
+                {isChatLoading && (
+                    <div className="text-left mb-3">
+                         <span className="inline-block p-2 rounded-lg bg-gray-200 text-gray-500 animate-pulse">
+                            Thinking...
+                         </span>
+                    </div>
+                )}
+                 {/* Error display for chat */}
+                {chatError && (
+                    <div className="text-left mb-3">
+                         <span className="inline-block p-2 rounded-lg bg-red-100 text-red-700">
+                            Error: {chatError}
+                         </span>
+                    </div>
+                )}
+                {/* Dummy div to ensure scrolling to bottom */}
+                <div ref={chatEndRef} /> 
+              </div>
 
-      <footer className="mt-12 text-center text-gray-500 text-sm">
-        Powered by Next.js and Huridocs
-      </footer>
-    </div>
+              {/* Chat Input Form - Fixed at bottom */}
+              <form onSubmit={handleChatSubmit} className="flex items-center mt-auto">
+                <input
+                  type="text"
+                  value={chatQuery}
+                  onChange={(e) => setChatQuery(e.target.value)}
+                  placeholder="Ask a question about the document..."
+                  className="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
+                  disabled={isChatLoading}
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={isChatLoading || !chatQuery.trim()}
+                  className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                    isChatLoading || !chatQuery.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  Send
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      ) : !isLoading && (
+        <p className="text-gray-500">Upload a PDF to view it here.</p>
+      )}
+
+    </main>
   );
 }
