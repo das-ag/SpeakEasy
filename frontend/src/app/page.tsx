@@ -579,7 +579,7 @@ export default function Home() {
       {isReading && (
         <div className="fixed top-4 right-4 z-50">
           <div 
-            className="bg-green-600 text-white px-4 py-2 rounded shadow-lg flex items-center cursor-pointer hover:bg-green-700 transition-colors duration-200 select-none"
+            className="bg-red-600 text-white px-4 py-2 rounded shadow-lg flex items-center cursor-pointer hover:bg-red-700 transition-colors duration-200 select-none"
             onClick={stopReading}
             title="Click to stop reading"
           >
