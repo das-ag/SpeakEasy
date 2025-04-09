@@ -562,6 +562,66 @@ export default function Home() {
     }
   };
 
+  // Function to handle click on a chat message (works for user and bot)
+  const handleChatMessageClick = (message: ChatMessage) => {
+    // Only read messages with text
+    if (!message.text || message.text.trim() === "") {
+      return;
+    }
+    
+    console.log("Chat message clicked:", message.text.substring(0, 50) + '...');
+    
+    // Use existing TTS logic
+    try {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+        
+        // Create and speak the utterance
+        const utterance = new SpeechSynthesisUtterance(message.text);
+        
+        // Apply selected voice and rate
+        if (selectedVoice) utterance.voice = selectedVoice;
+        utterance.rate = speechRate;
+        
+        // Set reading state and indicator message
+        setIsReading(true);
+        // Show beginning of message in toast
+        setToastMessage(`Reading: "${message.text.substring(0, 40)}${message.text.length > 40 ? '...' : ''}"`); 
+        setShowToast(true);
+        
+        // Add event handlers for speech lifecycle
+        utterance.onstart = () => {
+          console.log('Chat Speech started');
+          setIsReading(true);
+          setShowToast(true);
+        };
+        
+        utterance.onend = () => {
+          console.log('Chat Speech ended');
+          setIsReading(false);
+          setShowToast(false);
+          // We don't need to reset clickedBox here
+        };
+        
+        utterance.onerror = () => {
+          console.error('Chat Speech error');
+          setIsReading(false);
+          setShowToast(false);
+        };
+        
+        // Speak the text
+        window.speechSynthesis.speak(utterance);
+      } else {
+        console.error("Speech synthesis not available");
+      }
+    } catch (error) {
+      console.error("Error in chat speech synthesis:", error);
+      setIsReading(false);
+      setShowToast(false);
+    }
+  };
+
   return (
     <main className="flex min-h-screen flex-col p-4 md:p-8 lg:p-12 bg-gray-50">
       {/* Loading Overlay for Analysis */}
@@ -790,19 +850,19 @@ export default function Home() {
                   {/* Chat History Display */}
                   <div className="flex-grow overflow-y-auto border border-gray-200 rounded p-3 mb-3 bg-gray-50">
                     {chatHistory.map((msg, index) => (
-                      <div key={index} className={`mb-3 ${
-                          msg.sender === 'user' ? 'text-right' : 'text-left'
-                        }`}>
-                        <span className={`inline-block p-2 rounded-lg max-w-full break-words ${
+                      <div key={index} className={`mb-3 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}> 
+                        <span 
+                          className={`inline-block p-2 rounded-lg max-w-full break-words ${ 
                             msg.sender === 'user' 
-                            ? 'bg-blue-500 text-white' 
-                            : 'bg-gray-200 text-gray-800'
-                          }`}>
+                            ? 'bg-blue-500 text-white cursor-pointer hover:bg-blue-600' // Make user messages clickable
+                            : 'bg-gray-200 text-gray-800 cursor-pointer hover:bg-gray-300' // Keep bot messages clickable
+                          }`}
+                          onClick={() => handleChatMessageClick(msg)} // Add click handler to both
+                          title="Click to read aloud" // Add tooltip to both
+                        >
                           {/* Render bot messages using ReactMarkdown */}
                           {msg.sender === 'bot' ? (
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]} // Enable GitHub Flavored Markdown
-                            >
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {msg.text}
                             </ReactMarkdown>
                           ) : (
