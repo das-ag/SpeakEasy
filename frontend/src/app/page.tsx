@@ -28,6 +28,7 @@ interface ChatMessage {
   sender: 'user' | 'bot';
   text: string;
   sources?: any[]; // Optional: To store source document snippets
+  id?: string; // Add unique identifier for tracking expanded state
 }
 
 // Helper function to get a color based on segment type
@@ -79,6 +80,7 @@ export default function Home() {
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null); // Ref to scroll chat to bottom
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set()); // Track expanded sources
 
   // Configure worker on component mount
   useEffect(() => {
@@ -340,7 +342,11 @@ export default function Home() {
         return; // Don't submit empty queries or while loading
     }
 
-    const userMessage: ChatMessage = { sender: 'user', text: chatQuery };
+    const userMessage: ChatMessage = { 
+      sender: 'user', 
+      text: chatQuery,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // Add unique ID
+    };
     setChatHistory(prev => [...prev, userMessage]);
     setChatQuery(""); // Clear input immediately
     setIsChatLoading(true);
@@ -381,7 +387,8 @@ export default function Home() {
         const botMessage: ChatMessage = {
             sender: 'bot',
             text: result.response,
-            sources: result.sources // Include sources if available
+            sources: result.sources, // Include sources if available
+            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // Add unique ID
         };
         setChatHistory(prev => [...prev, botMessage]);
 
@@ -390,202 +397,296 @@ export default function Home() {
         const errorText = err instanceof Error ? err.message : "An unknown error occurred during chat.";
         setChatError(errorText);
         // Optionally add an error message to chat history
-        setChatHistory(prev => [...prev, {sender: 'bot', text: `Error: ${errorText}`}]);
+        setChatHistory(prev => [...prev, {
+          sender: 'bot', 
+          text: `Error: ${errorText}`,
+          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // Add unique ID
+        }]);
     } finally {
         setIsChatLoading(false);
     }
+  };
 
+  // Toggle source expansion for a specific message
+  const toggleSourceExpansion = (messageId: string) => {
+    setExpandedSources(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-4 md:p-8 lg:p-12 bg-gray-50">
+    <main className="flex min-h-screen flex-col p-4 md:p-8 lg:p-12 bg-gray-50">
       {/* Debug state display - remove after fixing */}
       <div className="fixed bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs p-2 rounded z-50">
         <p>Debug: File: {fileName ? "✅" : "❌"}, FileURL: {fileUrl ? "✅" : "❌"}, Pages: {numPages || "None"}</p>
       </div>
       
-      <h1 className="text-2xl md:text-3xl font-bold mb-6 text-gray-800">SpeakEasy Document Analyzer & Chat</h1>
+      {/* Header - Title in top left and larger */}
+      <div className="w-full mb-8">
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-800">SpeakEasy</h1>
+      </div>
 
-      {/* --- File Upload Form --- */}
-      <form onSubmit={handleSubmit} className="w-full max-w-lg bg-white p-6 rounded-lg shadow mb-8">
-        <div className="mb-4">
-          <label htmlFor="pdf-upload" className="block text-gray-700 text-sm font-bold mb-2">
-            Upload PDF Document:
-          </label>
-          <input
-            id="pdf-upload"
-            type="file"
-            accept=".pdf"
-            onChange={handleFileChange}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={isLoading || !file}
-          className={`w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
-            isLoading || !file ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-        >
-          {isLoading ? 'Analyzing...' : 'Analyze Document'}
-        </button>
-        {error && <p className="text-red-500 text-xs italic mt-4">Error: {error}</p>}
-      </form>
-
-      {/* --- PDF Viewer --- */}
-      {fileUrl ? (
-        <div className="w-full flex flex-col lg:flex-row gap-6 max-w-7xl">
-          {/* PDF Section */}
-          <div 
-            ref={containerRef}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
-            className={`w-full ${analysisResult ? 'lg:w-3/5' : 'lg:w-full'} h-[70vh] overflow-auto border border-gray-300 rounded-lg shadow bg-white relative`}
+      {/* Main content container */}
+      <div className="w-full max-w-7xl flex flex-col">
+        {/* --- File Upload Form --- Left aligned */}
+        <form onSubmit={handleSubmit} className="w-full max-w-lg bg-white p-6 rounded-lg shadow mb-8 self-start">
+          <div className="mb-4">
+            <label htmlFor="pdf-upload" className="block text-gray-700 text-sm font-bold mb-2">
+              Upload PDF Document:
+            </label>
+            <input
+              id="pdf-upload"
+              type="file"
+              accept=".pdf"
+              onChange={handleFileChange}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isLoading || !file}
+            className={`w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+              isLoading || !file ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
           >
-            <Document
-              file={fileUrl}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={(err) => {
-                console.error("PDF load error:", err);
-                setError(`Failed to load PDF: ${err.message}`);
-              }}
-              loading={<div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-700"></div><span className="ml-3">Loading PDF...</span></div>}
-            >
-              {numPages ? (
-                Array.from(new Array(numPages), (el, index) => (
-                  <div key={`page_wrapper_${index + 1}`} className="pdf-page-wrapper relative mb-2 border-b last:border-b-0" data-page-number={index + 1}>
-                    <Page
-                      key={`page_${index + 1}`}
-                      pageNumber={index + 1}
-                      width={containerRef.current ? containerRef.current.clientWidth * 0.98 : undefined} // Adjust width slightly for padding/border
-                      renderTextLayer={true} // Enable text layer for selection/accessibility
-                      renderAnnotationLayer={true}
-                    />
-                    {/* Render analysis boxes only if analysis results exist */}
-                    {analysisResult && analysisResult
-                      .filter(box => box.page_number === index + 1)
-                      .map((box, boxIndex) => (
-                        <div
-                          key={`box_${index + 1}_${boxIndex}`}
-                          className="absolute border border-dashed"
-                          style={{
-                            left: `${(box.left / box.page_width) * 100}%`,
-                            top: `${(box.top / box.page_height) * 100}%`,
-                            width: `${(box.width / box.page_width) * 100}%`,
-                            height: `${(box.height / box.page_height) * 100}%`,
-                            backgroundColor: getTypeColor(box.type),
-                            borderColor: getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'), // Darker border
-                            pointerEvents: 'none', // Let mouse events pass through to page
-                          }}
-                        />
-                      ))}
+            {isLoading ? 'Analyzing...' : 'Analyze Document'}
+          </button>
+          {error && <p className="text-red-500 text-xs italic mt-4">Error: {error}</p>}
+        </form>
+
+        {/* --- PDF Viewer and Metadata Panel --- */}
+        {fileUrl ? (
+          <div className="w-full flex flex-col lg:flex-row gap-6">
+            {/* Metadata Panel - Always visible to the left of PDF */}
+            <div className="w-full lg:w-1/6 h-[70vh] bg-white p-4 rounded-lg shadow flex flex-col overflow-auto">
+              <h2 className="text-lg font-semibold mb-4 text-gray-800">Document Elements</h2>
+              {/* Current hover information */}
+              <div className="border-b pb-3 mb-3">
+                <p className="font-medium text-gray-700">Currently Hovering:</p>
+                {hoveredBox ? (
+                  <div className="mt-2">
+                    <div className="flex items-center mb-1">
+                      <span className="font-semibold text-sm">Type:</span>
+                      <span 
+                        className="ml-2 px-2 py-1 text-xs rounded-md"
+                        style={{
+                          backgroundColor: getTypeColor(hoveredBox.type),
+                          borderColor: getTypeColor(hoveredBox.type).replace('0.2', '0.5').replace('0.1', '0.4')
+                        }}
+                      >
+                        {hoveredBox.type}
+                      </span>
+                    </div>
+                    <div className="mt-2">
+                      <span className="font-semibold text-sm">Content:</span>
+                      <p className="text-xs mt-1 bg-gray-50 p-2 rounded whitespace-pre-wrap max-h-40 overflow-y-auto">
+                        {hoveredBox.text}
+                      </p>
+                    </div>
                   </div>
-                ))
-              ) : (
-                <div className="flex justify-center items-center h-full">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-700"></div>
-                  <span className="ml-3">Loading PDF...</span>
+                ) : (
+                  <p className="text-sm text-gray-500 italic mt-1">
+                    Hover over the PDF to view element details...
+                  </p>
+                )}
+              </div>
+              
+              {/* Document statistics */}
+              {analysisResult && (
+                <div>
+                  <h3 className="font-medium text-gray-700 mb-2">Document Statistics:</h3>
+                  <ul className="text-sm space-y-1">
+                    <li><span className="font-semibold">Pages:</span> {numPages}</li>
+                    <li><span className="font-semibold">Elements:</span> {analysisResult.length}</li>
+                    {/* Count types */}
+                    {(() => {
+                      const typeCounts: {[key: string]: number} = {};
+                      analysisResult.forEach(box => {
+                        typeCounts[box.type] = (typeCounts[box.type] || 0) + 1;
+                      });
+                      return (
+                        <>
+                          {Object.entries(typeCounts).map(([type, count]) => (
+                            <li key={type} className="ml-3 flex items-center">
+                              <span 
+                                className="inline-block w-3 h-3 mr-1 rounded-sm"
+                                style={{ backgroundColor: getTypeColor(type) }}
+                              />
+                              {type}: {count}
+                            </li>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </ul>
                 </div>
               )}
-            </Document>
-            {/* Tooltip for hovered box - only visible with analysis results */}
-            {hoveredBox && (
-              <div 
-                  className="absolute bg-black text-white p-2 rounded text-xs shadow-lg z-10 pointer-events-none whitespace-pre-wrap max-w-xs"
-                  style={{ 
-                      // Position tooltip near the mouse, adjusting for container scroll
-                      left: `${(hoveredBox.left / hoveredBox.page_width * 100)}%`, // Adjust positioning as needed
-                      top: `${(hoveredBox.top / hoveredBox.page_height * 100)}%`, // Adjust positioning as needed
-                      // transform: 'translate(10px, -100%)' // Example offset
-                  }}
+            </div>
+            
+            {/* PDF Viewer - middle section */}
+            <div 
+              ref={containerRef}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+              className={`w-full ${analysisResult && chatFileHash ? 'lg:w-3/5' : 'lg:w-5/6'} h-[70vh] overflow-auto border border-gray-300 rounded-lg shadow bg-white relative`}
+            >
+              <Document
+                file={fileUrl}
+                onLoadSuccess={onDocumentLoadSuccess}
+                onLoadError={(err) => {
+                  console.error("PDF load error:", err);
+                  setError(`Failed to load PDF: ${err.message}`);
+                }}
+                loading={<div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-700"></div><span className="ml-3">Loading PDF...</span></div>}
               >
-                Type: {hoveredBox.type}\nText: {hoveredBox.text.substring(0, 100)}{hoveredBox.text.length > 100 ? '...' : ''}
+                {numPages ? (
+                  Array.from(new Array(numPages), (el, index) => (
+                    <div key={`page_wrapper_${index + 1}`} className="pdf-page-wrapper relative mb-2 border-b last:border-b-0" data-page-number={index + 1}>
+                      <Page
+                        key={`page_${index + 1}`}
+                        pageNumber={index + 1}
+                        width={containerRef.current ? containerRef.current.clientWidth * 0.98 : undefined} // Adjust width slightly for padding/border
+                        renderTextLayer={true} // Enable text layer for selection/accessibility
+                        renderAnnotationLayer={true}
+                      />
+                      {/* Render analysis boxes only if analysis results exist */}
+                      {analysisResult && analysisResult
+                        .filter(box => box.page_number === index + 1)
+                        .map((box, boxIndex) => (
+                          <div
+                            key={`box_${index + 1}_${boxIndex}`}
+                            className="absolute border border-dashed"
+                            style={{
+                              left: `${(box.left / box.page_width) * 100}%`,
+                              top: `${(box.top / box.page_height) * 100}%`,
+                              width: `${(box.width / box.page_width) * 100}%`,
+                              height: `${(box.height / box.page_height) * 100}%`,
+                              backgroundColor: getTypeColor(box.type),
+                              borderColor: getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'), // Darker border
+                              pointerEvents: 'none', // Let mouse events pass through to page
+                            }}
+                          />
+                        ))}
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex justify-center items-center h-full">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-700"></div>
+                    <span className="ml-3">Loading PDF...</span>
+                  </div>
+                )}
+              </Document>
+            </div>
+
+            {/* --- Chat Interface --- Only shown when analysis is complete and chat hash is available */}
+            {analysisResult && chatFileHash && (
+              <div className="w-full lg:w-1/4 h-[70vh] bg-white p-4 rounded-lg shadow flex flex-col">
+                <h2 className="text-lg font-semibold mb-4 text-gray-800">Chat with Document</h2>
+                
+                {/* Chat History Display - Made taller to match PDF height */}
+                <div className="flex-grow overflow-y-auto border border-gray-200 rounded p-3 mb-4 bg-gray-50">
+                  {chatHistory.map((msg, index) => (
+                    <div key={index} className={`mb-3 ${
+                        msg.sender === 'user' ? 'text-right' : 'text-left'
+                      }`}>
+                      <span className={`inline-block p-2 rounded-lg max-w-full break-words ${
+                          msg.sender === 'user' 
+                          ? 'bg-blue-500 text-white' 
+                          : 'bg-gray-200 text-gray-800'
+                        }`}>
+                        {msg.text}
+                        {/* Sources for bot messages with toggle functionality */}
+                        {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-gray-300 text-xs text-left">
+                            <button 
+                              onClick={(e) => {
+                                e.preventDefault(); // Prevent form submission
+                                if (msg.id) toggleSourceExpansion(msg.id);
+                              }} 
+                              className="font-semibold mb-1 text-blue-600 hover:text-blue-800 flex items-center"
+                            >
+                              Sources: ({msg.sources.length})
+                              <svg 
+                                className={`ml-1 w-4 h-4 transition-transform duration-200 ${
+                                  msg.id && expandedSources.has(msg.id) ? 'transform rotate-180' : ''
+                                }`} 
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24" 
+                                xmlns="http://www.w3.org/2000/svg"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                              </svg>
+                            </button>
+                            {msg.id && expandedSources.has(msg.id) && (
+                              <ul>
+                                {msg.sources.map((source, s_idx) => (
+                                  <li key={s_idx} title={JSON.stringify(source.metadata)} className="mb-1 p-1 bg-gray-100 rounded break-words overflow-hidden">
+                                    [...{source.metadata.page_number ? `P${source.metadata.page_number}` : 'N/A'}] {source.content_preview}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                  {/* Loading indicator for chat response */}
+                  {isChatLoading && (
+                      <div className="text-left mb-3">
+                          <span className="inline-block p-2 rounded-lg bg-gray-200 text-gray-500 animate-pulse">
+                              Thinking...
+                          </span>
+                      </div>
+                  )}
+                  {/* Error display for chat */}
+                  {chatError && (
+                      <div className="text-left mb-3">
+                          <span className="inline-block p-2 rounded-lg bg-red-100 text-red-700 break-words">
+                              Error: {chatError}
+                          </span>
+                      </div>
+                  )}
+                  {/* Dummy div to ensure scrolling to bottom */}
+                  <div ref={chatEndRef} /> 
+                </div>
+
+                {/* Chat Input Form - Fixed at bottom */}
+                <form onSubmit={handleChatSubmit} className="flex items-center mt-auto">
+                  <input
+                    type="text"
+                    value={chatQuery}
+                    onChange={(e) => setChatQuery(e.target.value)}
+                    placeholder="Ask a question..."
+                    className="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
+                    disabled={isChatLoading}
+                    required
+                  />
+                  <button
+                    type="submit"
+                    disabled={isChatLoading || !chatQuery.trim()}
+                    className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                      isChatLoading || !chatQuery.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    Send
+                  </button>
+                </form>
               </div>
             )}
           </div>
-
-          {/* --- Chat Interface --- Only shown when analysis is complete and chat hash is available */}
-          {analysisResult && chatFileHash && (
-            <div className="w-full lg:w-2/5 h-[70vh] bg-white p-4 rounded-lg shadow flex flex-col">
-              <h2 className="text-xl font-semibold mb-4 text-gray-800">Chat with {fileName}</h2>
-              
-              {/* Chat History Display - Made taller to match PDF height */}
-              <div className="flex-grow overflow-y-auto border border-gray-200 rounded p-3 mb-4 bg-gray-50">
-                {chatHistory.map((msg, index) => (
-                  <div key={index} className={`mb-3 ${
-                      msg.sender === 'user' ? 'text-right' : 'text-left'
-                    }`}>
-                    <span className={`inline-block p-2 rounded-lg ${
-                        msg.sender === 'user' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-200 text-gray-800'
-                      }`}>
-                      {msg.text}
-                      {/* Optional: Display sources for bot messages */}
-                      {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-gray-300 text-xs text-left">
-                          <p className="font-semibold mb-1">Sources:</p>
-                          <ul>
-                            {msg.sources.map((source, s_idx) => (
-                               <li key={s_idx} title={JSON.stringify(source.metadata)} className="mb-1 p-1 bg-gray-100 rounded truncate hover:whitespace-normal">
-                                    [...{source.metadata.page_number ? `P${source.metadata.page_number}` : 'N/A'}] {source.content_preview}
-                                </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </span>
-                  </div>
-                ))}
-                {/* Loading indicator for chat response */}
-                {isChatLoading && (
-                    <div className="text-left mb-3">
-                         <span className="inline-block p-2 rounded-lg bg-gray-200 text-gray-500 animate-pulse">
-                            Thinking...
-                         </span>
-                    </div>
-                )}
-                 {/* Error display for chat */}
-                {chatError && (
-                    <div className="text-left mb-3">
-                         <span className="inline-block p-2 rounded-lg bg-red-100 text-red-700">
-                            Error: {chatError}
-                         </span>
-                    </div>
-                )}
-                {/* Dummy div to ensure scrolling to bottom */}
-                <div ref={chatEndRef} /> 
-              </div>
-
-              {/* Chat Input Form - Fixed at bottom */}
-              <form onSubmit={handleChatSubmit} className="flex items-center mt-auto">
-                <input
-                  type="text"
-                  value={chatQuery}
-                  onChange={(e) => setChatQuery(e.target.value)}
-                  placeholder="Ask a question about the document..."
-                  className="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
-                  disabled={isChatLoading}
-                  required
-                />
-                <button
-                  type="submit"
-                  disabled={isChatLoading || !chatQuery.trim()}
-                  className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
-                    isChatLoading || !chatQuery.trim() ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                >
-                  Send
-                </button>
-              </form>
-            </div>
-          )}
-        </div>
-      ) : !isLoading && (
-        <p className="text-gray-500">Upload a PDF to view it here.</p>
-      )}
-
+        ) : !isLoading && (
+          <p className="text-gray-500">Upload a PDF to view it here.</p>
+        )}
+      </div>
     </main>
   );
 }
