@@ -72,6 +72,10 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null); // Ref for the container div
   const [hoveredBox, setHoveredBox] = useState<SegmentBox | null>(null); // Store the box object
+  const [clickedBox, setClickedBox] = useState<SegmentBox | null>(null);
+  const [showToast, setShowToast] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string>("");
+  const [isReading, setIsReading] = useState<boolean>(false);
 
   // --- Chat State ---
   const [chatFileHash, setChatFileHash] = useState<string | null>(null);
@@ -420,8 +424,120 @@ export default function Home() {
     });
   };
 
+  // Function to handle click on a bounding box
+  const handleBoxClick = (box: SegmentBox, event: React.MouseEvent) => {
+    // Stop event propagation to prevent interference
+    event.stopPropagation();
+    
+    console.log("Box clicked:", box);
+    
+    // Only proceed if there's text to read
+    if (!box.text || box.text.trim() === "") {
+      return;
+    }
+    
+    // Set as clicked for visual feedback
+    setClickedBox(box);
+    
+    // Simple text-to-speech implementation
+    try {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+        
+        // Create and speak the utterance
+        const utterance = new SpeechSynthesisUtterance(box.text);
+        
+        // Set reading state to true
+        setIsReading(true);
+        setToastMessage(`Reading: ${box.type}`);
+        setShowToast(true);
+        
+        // Add event handlers for speech lifecycle
+        utterance.onstart = () => {
+          console.log('Speech started');
+          // Ensure reading state is set
+          setIsReading(true);
+          setShowToast(true);
+        };
+        
+        utterance.onend = () => {
+          console.log('Speech ended');
+          // Reset states when speech completes
+          setClickedBox(null);
+          setIsReading(false);
+          setShowToast(false);
+        };
+        
+        utterance.onerror = () => {
+          console.error('Speech error');
+          // Reset states on error
+          setClickedBox(null);
+          setIsReading(false);
+          setShowToast(false);
+        };
+        
+        // Add a periodic check to ensure indicator stays visible during long speeches
+        const checkInterval = setInterval(() => {
+          if (window.speechSynthesis.speaking) {
+            setIsReading(true);
+          } else {
+            clearInterval(checkInterval);
+          }
+        }, 100);
+        
+        // Speak the text
+        window.speechSynthesis.speak(utterance);
+      } else {
+        console.error("Speech synthesis not available in this browser");
+      }
+    } catch (error) {
+      console.error("Error in speech synthesis:", error);
+      setIsReading(false);
+      setShowToast(false);
+    }
+  };
+
+  // Function to stop any active text-to-speech
+  const stopReading = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsReading(false);
+      setClickedBox(null);
+      setShowToast(false);
+    }
+  };
+
   return (
     <main className="flex min-h-screen flex-col p-4 md:p-8 lg:p-12 bg-gray-50">
+      {/* Reading Indicator - Made clickable to stop reading */}
+      {isReading && (
+        <div 
+          className="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50 flex items-center cursor-pointer hover:bg-green-700 transition-colors duration-200 select-none"
+          onClick={stopReading}
+          title="Click to stop reading"
+        >
+          <span className="animate-pulse mr-2">●</span>
+          {toastMessage}
+          <svg 
+            className="ml-2 w-4 h-4" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24" 
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <rect x="6" y="6" width="12" height="12" strokeWidth="2" />
+          </svg>
+        </div>
+      )}
+      
+      {/* Toast Notification (keep for other notifications) */}
+      {showToast && !isReading && (
+        <div className="fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded shadow-lg z-50 max-w-md">
+          {toastMessage}
+        </div>
+      )}
+      
       {/* Debug state display - remove after fixing */}
       <div className="fixed bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs p-2 rounded z-50">
         <p>Debug: File: {fileName ? "✅" : "❌"}, FileURL: {fileUrl ? "✅" : "❌"}, Pages: {numPages || "None"}</p>
@@ -569,16 +685,21 @@ export default function Home() {
                           return (
                             <div
                               key={`box_${index + 1}_${boxIndex}`}
-                              className="absolute border border-dashed"
+                              className="absolute border border-dashed cursor-pointer"
                               style={{
                                 left: `${leftPercent}%`,
                                 top: `${topPercent}%`,
                                 width: `${widthPercent}%`,
                                 height: `${heightPercent}%`,
                                 backgroundColor: getTypeColor(box.type),
-                                borderColor: getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'), // Darker border
-                                pointerEvents: 'none', // Let mouse events pass through to page
+                                borderColor: getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'),
+                                pointerEvents: 'auto', // Ensure clicks are captured
+                                zIndex: 10, // Make sure boxes are on top
+                                opacity: clickedBox === box ? '0.8' : '0.3',
+                                transition: 'opacity 0.2s ease',
                               }}
+                              onClick={(e) => handleBoxClick(box, e)}
+                              title={box.text ? "Click to read text aloud" : "No text available"}
                             />
                           );
                         })}
