@@ -767,8 +767,10 @@ export default function Home() {
       return;
     }
     
-    setIsSummaryLoading(true);
-    setSummaryError(null);
+    // Only set loading state initially, not during refreshes
+    if (!getPartial || !summaries) {
+      setIsSummaryLoading(true);
+    }
     
     try {
       const url = `/api/summarize/${chatFileHash}${getPartial ? '?partial=true' : ''}${resume ? (getPartial ? '&' : '?') + 'resume=true' : ''}`;
@@ -788,15 +790,21 @@ export default function Home() {
       console.log("Summaries fetched:", result);
       
       if (result.summaries) {
+        // Always update summaries with the latest data
         setSummaries(result.summaries);
+        
+        // Always update the count message if we have partial results
+        if (result.is_partial) {
+          const countMessage = `Loading summaries: ${Object.keys(result.summaries).length} segments processed so far...`;
+          setSummaryError(countMessage);
+          console.log(countMessage);
+        }
+        
         // Don't automatically show summaries when generated
         // setShowSummaries(true);
         
         // If it's a partial result, schedule a refresh
         if (result.is_partial && result.status === 'in_progress') {
-          // Set a progress message
-          setSummaryError(`Loading summaries: ${result.count} segments processed so far...`);
-          
           // Schedule refresh in 5 seconds
           setTimeout(() => {
             if (document.hasFocus()) { // Only refresh if the page is still in focus
