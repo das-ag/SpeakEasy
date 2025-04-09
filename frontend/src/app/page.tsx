@@ -5,6 +5,8 @@ import { useState, ChangeEvent, FormEvent, useEffect, useRef, MouseEvent } from 
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // Move worker configuration into a useEffect hook
 // pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`; // Moved below
@@ -562,6 +564,17 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col p-4 md:p-8 lg:p-12 bg-gray-50">
+      {/* Loading Overlay for Analysis */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl flex flex-col items-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Analyzing Document</h3>
+            <p className="text-gray-600">Please wait while we process your PDF...</p>
+          </div>
+        </div>
+      )}
+      
       {/* Reading Indicator - Made clickable to stop reading */}
       {isReading && (
         <div className="fixed top-4 right-4 z-50">
@@ -769,7 +782,7 @@ export default function Home() {
             </div>
 
             {/* Chat Interface - Position to the right, outside of normal document flow */}
-            <div className="w-full lg:w-1/4 h-[50vh] bg-white p-4 rounded-lg shadow flex flex-col">
+            <div className="w-full lg:w-1/4 h-[60vh] bg-white p-4 rounded-lg shadow flex flex-col">
               {analysisResult && chatFileHash ? (
                 <>
                   <h2 className="text-lg font-semibold mb-3 text-gray-800">Chat with Document</h2>
@@ -785,7 +798,17 @@ export default function Home() {
                             ? 'bg-blue-500 text-white' 
                             : 'bg-gray-200 text-gray-800'
                           }`}>
-                          {msg.text}
+                          {/* Render bot messages using ReactMarkdown */}
+                          {msg.sender === 'bot' ? (
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]} // Enable GitHub Flavored Markdown
+                            >
+                              {msg.text}
+                            </ReactMarkdown>
+                          ) : (
+                            msg.text // Render user messages as plain text
+                          )}
+                          
                           {/* Sources for bot messages with toggle functionality */}
                           {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
                             <div className="mt-2 pt-2 border-t border-gray-300 text-xs text-left">
