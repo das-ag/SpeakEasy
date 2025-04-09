@@ -3,8 +3,18 @@ import requests
 import os
 import json
 from flask import Flask, jsonify, request
+from dotenv import load_dotenv # Import load_dotenv
+from rag_handler import DocumentRAG # Import DocumentRAG
 
 app = Flask(__name__)
+
+# --- Load Environment Variables ---
+load_dotenv() # Load variables from .env file
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+if not GOOGLE_API_KEY:
+    print("Warning: GOOGLE_API_KEY not found in environment. RAG features will fail.")
+    # Or raise an error if RAG is critical: raise ValueError("GOOGLE_API_KEY is required")
+# --------------------------------
 
 # --- Cache Configuration ---
 # Directory to store persistent JSON results
@@ -17,7 +27,18 @@ analysis_cache = {}
 # -------------------------
 
 # Configuration for Huridocs service
-HURIDOCS_URL = "http://localhost:5060" # Default URL for huridocs/pdf-document-layout-analysis
+HURIDOCS_URL = os.getenv("HURIDOCS_URL", "http://localhost:5060") # Get from env or use default
+
+# --- Initialize RAG Handler ---
+try:
+    rag_handler = DocumentRAG(google_api_key=GOOGLE_API_KEY)
+except ValueError as e:
+    print(f"Error initializing RAG Handler: {e}. Chat features disabled.")
+    rag_handler = None # Disable RAG features if key is missing/invalid
+except Exception as e:
+    print(f"Unexpected error initializing RAG Handler: {e}. Chat features disabled.")
+    rag_handler = None
+# ---------------------------
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -109,6 +130,55 @@ def analyze_pdf():
             return jsonify({"error": f"An internal server error occurred: {e}"}), 500
     else:
         return jsonify({"error": "Invalid file type, only PDF is allowed"}), 400
+
+# --- RAG Chat Endpoint ---
+@app.route('/api/chat/<string:filehash>', methods=['POST'])
+def chat_with_document(filehash):
+    """
+    Handles chat queries for a specific, previously analyzed document.
+    Expects JSON: {"query": "user's question"}
+    Uses the filehash (SHA256 of the original PDF) to find the JSON analysis.
+    """
+    if rag_handler is None:
+        return jsonify({"error": "Chat features are disabled due to configuration error."}), 503
+
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    query = data.get('query')
+
+    if not query:
+        return jsonify({"error": "Missing 'query' in request body"}), 400
+
+    # Construct the path to the analyzed JSON file
+    json_filename = f"{filehash}.json"
+    json_filepath = os.path.join(OUTPUT_DIR, json_filename)
+
+    if not os.path.exists(json_filepath):
+        return jsonify({"error": f"Analysis file for hash {filehash} not found. Please analyze the PDF first."}), 404
+
+    try:
+        # Use the RAG handler to query the document
+        # The handler manages loading/indexing internally
+        result = rag_handler.query(json_filepath, query)
+        
+        if "error" in result:
+             # Handle errors reported by the RAG handler itself
+             status_code = 500 # Internal Server Error by default
+             if "not found or failed to index" in result["error"]:
+                  status_code = 404 # Not Found
+             return jsonify(result), status_code
+        
+        # Add the query to the response for context
+        result["user_query"] = query
+        return jsonify(result), 200
+
+    except Exception as e:
+        # Catch unexpected errors during the query process
+        print(f"Unexpected error during chat query for {filehash}: {e}")
+        return jsonify({"error": "An unexpected error occurred processing your chat request."}), 500
+# -----------------------
 
 # Add other API routes here later, e.g., for huridocs interaction
 

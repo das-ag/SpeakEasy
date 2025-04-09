@@ -23,6 +23,13 @@ interface SegmentBox {
   type: string; // "Caption", "Footnote", "Formula", "List item", "Page footer", "Page header", "Picture", "Section header", "Table", "Text", "Title"
 }
 
+// Interface for chat messages
+interface ChatMessage {
+  sender: 'user' | 'bot';
+  text: string;
+  sources?: any[]; // Optional: To store source document snippets
+}
+
 // Helper function to get a color based on segment type
 const getTypeColor = (type: string): string => {
   switch (type.toLowerCase()) {
@@ -41,6 +48,15 @@ const getTypeColor = (type: string): string => {
   }
 };
 
+// Helper function to calculate SHA-256 hash
+async function calculateSHA256(file: File): Promise<string> {
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
+
 // localStorage keys
 // REMOVED: const LS_RESULT_PREFIX = 'speakeasy_analysis_result_';
 // REMOVED: const LS_NUMPAGES_PREFIX = 'speakeasy_num_pages_'; // Removed as numPages is no longer cached
@@ -55,6 +71,14 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null); // Ref for the container div
   const [hoveredBox, setHoveredBox] = useState<SegmentBox | null>(null); // Store the box object
+
+  // --- Chat State ---
+  const [chatFileHash, setChatFileHash] = useState<string | null>(null);
+  const [chatQuery, setChatQuery] = useState<string>("");
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null); // Ref to scroll chat to bottom
 
   // Configure worker on component mount
   useEffect(() => {
@@ -85,17 +109,27 @@ export default function Home() {
     };
   }, [fileUrl]);
 
+  // Scroll chat to bottom when history updates
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatHistory]);
+
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const selectedFile = event.target.files[0];
       const currentFileName = selectedFile.name;
 
-      // Clear previous state
+      // Clear ALL relevant state for new file
       setFile(selectedFile);
       setFileName(currentFileName);
       setAnalysisResult(null);
       setError(null);
+      setChatError(null); // Clear chat error too
       setNumPages(null);
+      setChatFileHash(null); // Clear hash for new file
+      setChatHistory([]); // Clear chat history
+      setChatQuery(""); // Clear chat input
+      
       if (fileUrl) {
         URL.revokeObjectURL(fileUrl);
       }
@@ -113,35 +147,59 @@ export default function Home() {
 
     setIsLoading(true);
     setError(null);
-    // Clear previous results before new analysis
+    setChatError(null);
     setAnalysisResult(null);
+    setChatFileHash(null); // Clear hash before new analysis
+    setChatHistory([]); // Clear chat history
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
       console.log(`Starting analysis for ${fileName}...`);
-      const response = await fetch('/api/analyze', {
+      // *** USE THE CORRECT BACKEND API URL HERE ***
+      // If backend runs on 5001 and frontend on 3000, direct fetch might work
+      // but for robustness (e.g., deployment), use a relative path or environment variable.
+      // Assuming relative path works if frontend proxy is set up or same origin:
+      const analyzeApiUrl = '/api/analyze'; 
+      // Or use full URL if needed: const analyzeApiUrl = 'http://localhost:5001/analyze';
+      
+      const response = await fetch(analyzeApiUrl, { // Use configured URL
         method: 'POST',
         body: formData,
+        // Add timeout? Default fetch timeout is long, but consider explicit
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        let errorMsg = `HTTP error! status: ${response.status}`;
+        try {
+            const errorData = await response.json();
+            errorMsg = errorData.error || errorMsg;
+        } catch (jsonError) {
+            // If response isn't JSON, use text
+            errorMsg = await response.text();
+        }
+        throw new Error(errorMsg);
       }
 
       const result: SegmentBox[] = await response.json();
       setAnalysisResult(result);
-      console.log(`Analysis successful for ${fileName}.`);
+      console.log(`Analysis successful for ${fileName}. Calculating hash...`);
+
+      // Calculate and store file hash for chat API calls
+      const hash = await calculateSHA256(file);
+      setChatFileHash(hash);
+      console.log(`File hash calculated: ${hash.substring(0, 8)}...`);
 
     } catch (err) {
       console.error("Analysis error:", err);
       setError(err instanceof Error ? err.message : "An unknown error occurred during analysis.");
-      setFileUrl(null); // Clear file URL on analysis error
       if (fileUrl) URL.revokeObjectURL(fileUrl);
+      setFileUrl(null); // Clear file URL on analysis error
       setAnalysisResult(null); // Clear results on error
       setNumPages(null);
+      setChatFileHash(null); // Clear hash on error
+      setChatHistory([]); // Clear chat history
     } finally {
       setIsLoading(false);
     }
@@ -272,6 +330,69 @@ export default function Home() {
 
   const handleMouseLeave = () => {
     setHoveredBox(null);
+  };
+
+  const handleChatSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!chatQuery.trim() || !chatFileHash || isChatLoading) {
+        return; // Don't submit empty queries or while loading
+    }
+
+    const userMessage: ChatMessage = { sender: 'user', text: chatQuery };
+    setChatHistory(prev => [...prev, userMessage]);
+    setChatQuery(""); // Clear input immediately
+    setIsChatLoading(true);
+    setChatError(null);
+
+    try {
+        console.log(`Sending chat query for hash ${chatFileHash.substring(0,8)}...: ${userMessage.text}`);
+        // *** USE THE CORRECT BACKEND API URL HERE ***
+        const chatApiUrl = `/api/chat/${chatFileHash}`; 
+        // Or use full URL: const chatApiUrl = `http://localhost:5001/api/chat/${chatFileHash}`;
+
+        const response = await fetch(chatApiUrl, { // Use configured URL
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query: userMessage.text }),
+        });
+
+        if (!response.ok) {
+            // Read the body ONCE as text first
+            const errorText = await response.text();
+            let errorMsg = `Chat API error! status: ${response.status}`;
+             try {
+                // Try to parse the text as JSON
+                const errorData = JSON.parse(errorText);
+                errorMsg = errorData.error || errorMsg;
+            } catch (parseError) { 
+                 // If parsing fails, use the raw text (it might not be JSON)
+                 errorMsg = errorText || errorMsg; 
+            }
+            throw new Error(errorMsg);
+        }
+
+        const result = await response.json();
+        console.log("Chat API response received:", result);
+
+        const botMessage: ChatMessage = {
+            sender: 'bot',
+            text: result.response,
+            sources: result.sources // Include sources if available
+        };
+        setChatHistory(prev => [...prev, botMessage]);
+
+    } catch (err) {
+        console.error("Chat error:", err);
+        const errorText = err instanceof Error ? err.message : "An unknown error occurred during chat.";
+        setChatError(errorText);
+        // Optionally add an error message to chat history
+        setChatHistory(prev => [...prev, {sender: 'bot', text: `Error: ${errorText}`}]);
+    } finally {
+        setIsChatLoading(false);
+    }
+
   };
 
   return (
@@ -424,6 +545,83 @@ export default function Home() {
                 })}
               </Document>
             </div>
+          </div>
+        )}
+
+        {/* --- Chat Interface --- */}
+        {analysisResult && chatFileHash && (
+          <div className="w-full max-w-2xl mt-8 bg-white p-4 rounded-lg shadow">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800">Chat with Document ({fileName})</h2>
+            
+            {/* Chat History Display */}
+            <div className="h-64 overflow-y-auto border border-gray-200 rounded p-3 mb-4 bg-gray-50">
+              {chatHistory.map((msg, index) => (
+                <div key={index} className={`mb-3 ${
+                    msg.sender === 'user' ? 'text-right' : 'text-left'
+                  }`}>
+                  <span className={`inline-block p-2 rounded-lg ${
+                      msg.sender === 'user' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-200 text-gray-800'
+                    }`}>
+                    {msg.text}
+                    {/* Optional: Display sources for bot messages */}
+                    {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-300 text-xs text-left">
+                        <p className="font-semibold mb-1">Sources:</p>
+                        <ul>
+                          {msg.sources.map((source, s_idx) => (
+                             <li key={s_idx} title={JSON.stringify(source.metadata)} className="mb-1 p-1 bg-gray-100 rounded truncate hover:whitespace-normal">
+                                  [...{source.metadata.page_number ? `P${source.metadata.page_number}` : 'N/A'}] {source.content_preview}
+                              </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </span>
+                </div>
+              ))}
+              {/* Loading indicator for chat response */}
+              {isChatLoading && (
+                  <div className="text-left mb-3">
+                       <span className="inline-block p-2 rounded-lg bg-gray-200 text-gray-500 animate-pulse">
+                          Thinking...
+                       </span>
+                  </div>
+              )}
+               {/* Error display for chat */}
+              {chatError && (
+                  <div className="text-left mb-3">
+                       <span className="inline-block p-2 rounded-lg bg-red-100 text-red-700">
+                          Error: {chatError}
+                       </span>
+                  </div>
+              )}
+              {/* Dummy div to ensure scrolling to bottom */}
+              <div ref={chatEndRef} /> 
+            </div>
+
+            {/* Chat Input Form */}
+            <form onSubmit={handleChatSubmit} className="flex items-center">
+              <input
+                type="text"
+                value={chatQuery}
+                onChange={(e) => setChatQuery(e.target.value)}
+                placeholder="Ask a question about the document..."
+                className="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
+                disabled={isChatLoading}
+                required
+              />
+              <button
+                type="submit"
+                disabled={isChatLoading || !chatQuery.trim()}
+                className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                  isChatLoading || !chatQuery.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                Send
+              </button>
+            </form>
           </div>
         )}
 
