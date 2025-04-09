@@ -552,28 +552,36 @@ export default function Home() {
                       <Page
                         key={`page_${index + 1}`}
                         pageNumber={index + 1}
-                        width={containerRef.current ? containerRef.current.clientWidth * 0.98 : undefined} // Adjust width slightly for padding/border
+                        width={containerRef.current ? containerRef.current.clientWidth : undefined} // Use full container width
                         renderTextLayer={true} // Enable text layer for selection/accessibility
                         renderAnnotationLayer={true}
                       />
                       {/* Render analysis boxes only if analysis results exist */}
                       {analysisResult && analysisResult
                         .filter(box => box.page_number === index + 1)
-                        .map((box, boxIndex) => (
-                          <div
-                            key={`box_${index + 1}_${boxIndex}`}
-                            className="absolute border border-dashed"
-                            style={{
-                              left: `${(box.left / box.page_width) * 100}%`,
-                              top: `${(box.top / box.page_height) * 100}%`,
-                              width: `${(box.width / box.page_width) * 100}%`,
-                              height: `${(box.height / box.page_height) * 100}%`,
-                              backgroundColor: getTypeColor(box.type),
-                              borderColor: getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'), // Darker border
-                              pointerEvents: 'none', // Let mouse events pass through to page
-                            }}
-                          />
-                        ))}
+                        .map((box, boxIndex) => {
+                          // Calculate percentage positions with adjustments for accurate alignment
+                          const leftPercent = (box.left / box.page_width) * 100;
+                          const topPercent = (box.top / box.page_height) * 100;
+                          const widthPercent = (box.width / box.page_width) * 100;
+                          const heightPercent = (box.height / box.page_height) * 100;
+                          
+                          return (
+                            <div
+                              key={`box_${index + 1}_${boxIndex}`}
+                              className="absolute border border-dashed"
+                              style={{
+                                left: `${leftPercent}%`,
+                                top: `${topPercent}%`,
+                                width: `${widthPercent}%`,
+                                height: `${heightPercent}%`,
+                                backgroundColor: getTypeColor(box.type),
+                                borderColor: getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'), // Darker border
+                                pointerEvents: 'none', // Let mouse events pass through to page
+                              }}
+                            />
+                          );
+                        })}
                     </div>
                   ))
                 ) : (
