@@ -710,17 +710,6 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col p-4 md:p-8 lg:p-12 bg-gray-50">
-      {/* Loading Overlay for Analysis */}
-      {isLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl flex flex-col items-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Analyzing Document</h3>
-            <p className="text-gray-600">Please wait while we process your PDF...</p>
-          </div>
-        </div>
-      )}
-      
       {/* Reading Indicator - Made clickable to stop reading */}
       {isReading && (
         <div className="fixed top-4 right-4 z-50">
@@ -766,27 +755,37 @@ export default function Home() {
         {/* --- File Upload Form --- Left aligned */}
         <form onSubmit={handleSubmit} className="w-full max-w-lg bg-white p-6 rounded-lg shadow mb-8 self-start">
           <div className="mb-4">
-            <label htmlFor="pdf-upload" className="block text-gray-700 text-sm font-bold mb-2">
+            <label htmlFor="pdfUpload" className="block text-gray-700 text-sm font-bold mb-2">
               Upload PDF Document:
             </label>
             <input
-              id="pdf-upload"
+              id="pdfUpload"
               type="file"
-              accept=".pdf"
               onChange={handleFileChange}
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              required
+              accept="application/pdf"
+              disabled={isLoading}
             />
           </div>
-          <button
-            type="submit"
-            disabled={isLoading || !file}
-            className={`w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
-              isLoading || !file ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-          >
-            {isLoading ? 'Analyzing...' : 'Analyze Document'}
-          </button>
+          <div className="flex items-center">
+            <button
+              type="submit"
+              disabled={!fileName || isLoading}
+              className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                !fileName || isLoading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              Analyze Document
+            </button>
+            
+            {/* Inline loading indicator */}
+            {isLoading && (
+              <div className="flex items-center ml-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+                <span className="text-sm text-gray-700">Analyzing...</span>
+              </div>
+            )}
+          </div>
           {error && <p className="text-red-500 text-xs italic mt-4">Error: {error}</p>}
         </form>
 
