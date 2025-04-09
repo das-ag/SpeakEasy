@@ -171,12 +171,19 @@ export default function Home() {
         console.log('Available voices:', voices);
         setAvailableVoices(voices);
         
-        // Set default voice - prefer Samantha, then system default, then first available
+        // Set default voice - prefer Google US, then system default, then first available
         if (voices.length > 0) {
-          // Look for Samantha voice
-          const samanthaVoice = voices.find(voice => voice.name.includes('Samantha'));
-          // Fall back to system default or first voice if Samantha not found
-          const defaultVoice = samanthaVoice || voices.find(voice => voice.default) || voices[0];
+          // Look for Google US voice
+          const googleUSVoice = voices.find(voice => 
+            voice.name.includes('Google') && 
+            (voice.name.includes('US') || voice.lang === 'en-US')
+          );
+          
+          // Fall back to any Google voice
+          const anyGoogleVoice = googleUSVoice || voices.find(voice => voice.name.includes('Google'));
+          
+          // Fall back to system default or first voice if Google voices not found
+          const defaultVoice = anyGoogleVoice || voices.find(voice => voice.default) || voices[0];
           setSelectedVoice(defaultVoice);
           console.log('Default voice set to:', defaultVoice.name);
         }
@@ -859,6 +866,64 @@ export default function Home() {
             behavior: 'smooth'
           });
         }
+
+        // Read the summary aloud
+        try {
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            // Cancel any ongoing speech
+            window.speechSynthesis.cancel();
+            
+            // Create and speak the utterance
+            const utterance = new SpeechSynthesisUtterance(summary.summary);
+            
+            // Apply selected voice if available
+            if (selectedVoice) {
+              utterance.voice = selectedVoice;
+              console.log('Using voice:', selectedVoice.name);
+            }
+            
+            // Apply speech rate
+            utterance.rate = speechRate;
+            console.log('Using speech rate:', speechRate);
+            
+            // Set reading state to true
+            setIsReading(true);
+            setToastMessage(`Reading Summary: ${summary.summary.substring(0, 40)}${summary.summary.length > 40 ? '...' : ''}`);
+            setShowToast(true);
+            
+            // Add event handlers for speech lifecycle
+            utterance.onstart = () => {
+              console.log('Speech started');
+              // Ensure reading state is set
+              setIsReading(true);
+              setShowToast(true);
+            };
+            
+            utterance.onend = () => {
+              console.log('Speech ended');
+              // Reset states when speech completes
+              setIsReading(false);
+              setShowToast(false);
+              // Don't clear the clickedBox or highlightedSummaryId to maintain visual highlight
+            };
+            
+            utterance.onerror = () => {
+              console.error('Speech error');
+              // Reset states on error
+              setIsReading(false);
+              setShowToast(false);
+            };
+            
+            // Speak the text
+            window.speechSynthesis.speak(utterance);
+          } else {
+            console.error("Speech synthesis not available in this browser");
+          }
+        } catch (error) {
+          console.error("Error in speech synthesis:", error);
+          setIsReading(false);
+          setShowToast(false);
+        }
       }
     }
   };
@@ -1104,10 +1169,10 @@ export default function Home() {
                             .map(([id, summary]) => (
                               <div 
                                 key={id} 
-                                className={`mb-2 p-2 rounded border cursor-pointer transition-colors ${
+                                className={`mb-2 p-2 rounded cursor-pointer transition-colors ${
                                   highlightedSummaryId === id 
-                                    ? 'bg-blue-200 border-blue-400' 
-                                    : 'bg-blue-50 border-blue-100 hover:bg-blue-100'
+                                    ? 'bg-blue-200 border-2 border-orange-500 shadow-md' 
+                                    : 'bg-blue-50 border border-blue-100 hover:bg-blue-100'
                                 }`}
                                 onClick={() => handleSummaryClick(id, summary)}
                               >
@@ -1168,7 +1233,66 @@ export default function Home() {
                               const summary = findSummaryForElement(hoveredBox);
                               if (summary) {
                                 return (
-                                  <p className="text-xs mt-1 bg-blue-50 p-2 rounded whitespace-pre-wrap border border-blue-100 text-gray-800">
+                                  <p 
+                                    className={`text-xs mt-1 p-2 rounded whitespace-pre-wrap border transition-all duration-200 cursor-pointer ${
+                                      isReading 
+                                      ? 'bg-blue-100 border-2 border-orange-500 shadow-md' 
+                                      : 'bg-blue-50 border border-blue-100 hover:bg-blue-100'
+                                    } text-gray-800`}
+                                    onClick={() => {
+                                      // Stop any current audio
+                                      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                                        window.speechSynthesis.cancel();
+                                      }
+                                      
+                                      // Read the summary aloud
+                                      try {
+                                        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                                          const utterance = new SpeechSynthesisUtterance(summary.summary);
+                                          
+                                          // Apply selected voice if available
+                                          if (selectedVoice) {
+                                            utterance.voice = selectedVoice;
+                                          }
+                                          
+                                          // Apply speech rate
+                                          utterance.rate = speechRate;
+                                          
+                                          // Set reading state to true
+                                          setIsReading(true);
+                                          setToastMessage(`Reading summary: ${summary.summary.substring(0, 40)}${summary.summary.length > 40 ? '...' : ''}`);
+                                          setShowToast(true);
+                                          
+                                          // Add event handlers for speech lifecycle
+                                          utterance.onstart = () => {
+                                            console.log('Summary speech started');
+                                            setIsReading(true);
+                                            setShowToast(true);
+                                          };
+                                          
+                                          utterance.onend = () => {
+                                            console.log('Summary speech ended');
+                                            setIsReading(false);
+                                            setShowToast(false);
+                                          };
+                                          
+                                          utterance.onerror = () => {
+                                            console.error('Speech error');
+                                            setIsReading(false);
+                                            setShowToast(false);
+                                          };
+                                          
+                                          // Speak the text
+                                          window.speechSynthesis.speak(utterance);
+                                        }
+                                      } catch (error) {
+                                        console.error("Error in speech synthesis:", error);
+                                        setIsReading(false);
+                                        setShowToast(false);
+                                      }
+                                    }}
+                                    title="Click to read summary aloud"
+                                  >
                                     {summary.summary}
                                   </p>
                                 );
@@ -1292,12 +1416,13 @@ export default function Home() {
                           const isClicked = clickedBox === box;
                           
                           // Add a small buffer (0.4%) to the hovered box to prevent border from overlapping text
-                          const bufferAmount = isHovered ? 0.4 : 0;
+                          const bufferAmount = (isHovered || isClicked) ? 0.4 : 0;
                           
                           return (
                             <div
                               key={`box_${index + 1}_${boxIndex}`}
                               className={`absolute border cursor-pointer ${
+                                isHovered && isClicked ? 'border-2 z-30' : 
                                 isHovered ? 'border-2 z-20' : 
                                 isClicked ? 'border-dashed z-20' : 
                                 'border-dashed z-10'
@@ -1308,13 +1433,17 @@ export default function Home() {
                                 width: `${widthPercent + (bufferAmount * 2)}%`,
                                 height: `${heightPercent + (bufferAmount * 2)}%`,
                                 backgroundColor: getTypeColor(box.type),
-                                borderColor: isHovered 
-                                  ? '#FF5733' // Bright orange border for hovered box
-                                  : getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'),
+                                borderColor: isHovered && isClicked ? '#9C27B0' : // Purple for both hovered and clicked 
+                                  isHovered ? '#FF5733' : // Orange for hovered
+                                  isClicked ? '#2196F3' : // Blue for clicked
+                                  getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'),
                                 pointerEvents: 'auto', // Ensure clicks are captured
                                 opacity: isClicked ? '0.8' : isHovered ? '0.6' : '0.3',
                                 transition: 'opacity 0.2s ease, border-color 0.2s ease',
-                                boxShadow: isHovered ? '0 0 0 2px rgba(255, 87, 51, 0.5)' : 'none', // Outer glow effect
+                                boxShadow: isHovered && isClicked ? '0 0 0 2px rgba(156, 39, 176, 0.5)' : // Purple glow
+                                  isHovered ? '0 0 0 2px rgba(255, 87, 51, 0.5)' : // Orange glow
+                                  isClicked ? '0 0 0 2px rgba(33, 150, 243, 0.5)' : // Blue glow
+                                  'none',
                               }}
                               onClick={(e) => handleBoxClick(box, e)}
                               title={box.text ? "Click to read text aloud" : "No text available"}
