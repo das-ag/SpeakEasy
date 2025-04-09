@@ -795,66 +795,79 @@ export default function Home() {
             {/* Metadata Panel - Slightly reduce width */}
             <div className="w-full lg:w-1/6 h-[70vh] bg-white p-4 rounded-lg shadow-md border border-gray-200 flex flex-col overflow-auto">
               <h2 className="text-lg font-bold mb-4 text-gray-900">Document Elements</h2>
-              {/* Current hover information */}
-              <div className="border-b border-gray-300 pb-3 mb-3">
-                <p className="font-medium text-gray-900">Currently Hovering:</p>
-                {hoveredBox ? (
-                  <div className="mt-2">
-                    <div className="flex items-center mb-1">
-                      <span className="font-semibold text-sm text-gray-900">Type:</span>
-                      <span 
-                        className="ml-2 px-2 py-1 text-xs rounded-md font-medium text-gray-900 border"
-                        style={{
-                          backgroundColor: getTypeColor(hoveredBox.type),
-                          borderColor: getTypeColor(hoveredBox.type).replace('0.2', '0.5').replace('0.1', '0.4')
-                        }}
-                      >
-                        {hoveredBox.type}
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <span className="font-semibold text-sm text-gray-900">Content:</span>
-                      <p className="text-xs mt-1 bg-white p-2 rounded whitespace-pre-wrap max-h-40 overflow-y-auto border border-gray-300 text-gray-900 shadow-sm">
-                        {hoveredBox.text}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-600 italic mt-1">
-                    Hover over the PDF to view element details...
-                  </p>
-                )}
-              </div>
               
-              {/* Document statistics */}
-              {analysisResult && (
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-2">Document Statistics:</h3>
-                  <ul className="text-sm space-y-2 text-gray-800">
-                    <li><span className="font-semibold">Pages:</span> {numPages}</li>
-                    <li><span className="font-semibold">Elements:</span> {analysisResult.length}</li>
-                    {/* Count types */}
-                    {(() => {
-                      const typeCounts: {[key: string]: number} = {};
-                      analysisResult.forEach(box => {
-                        typeCounts[box.type] = (typeCounts[box.type] || 0) + 1;
-                      });
-                      return (
-                        <>
-                          {Object.entries(typeCounts).map(([type, count]) => (
-                            <li key={type} className="ml-3 flex items-center">
-                              <span 
-                                className="inline-block w-3 h-3 mr-1 rounded-sm border border-gray-400"
-                                style={{ backgroundColor: getTypeColor(type) }}
-                              />
-                              <span className="text-gray-800">{type}: {count}</span>
-                            </li>
-                          ))}
-                        </>
-                      );
-                    })()}
-                  </ul>
+              {isLoading ? (
+                /* Loading state for Document Elements */
+                <div className="flex-grow flex flex-col items-center justify-center text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-3"></div>
+                  <p className="text-gray-700 font-medium mb-1">Analyzing document...</p>
+                  <p className="text-sm text-gray-500">Element details will appear here when analysis is complete.</p>
                 </div>
+              ) : (
+                /* Normal content when not loading */
+                <>
+                  {/* Current hover information */}
+                  <div className="border-b border-gray-300 pb-3 mb-3">
+                    <p className="font-medium text-gray-900">Currently Hovering:</p>
+                    {hoveredBox ? (
+                      <div className="mt-2">
+                        <div className="flex items-center mb-1">
+                          <span className="font-semibold text-sm text-gray-900">Type:</span>
+                          <span 
+                            className="ml-2 px-2 py-1 text-xs rounded-md font-medium text-gray-900 border"
+                            style={{
+                              backgroundColor: getTypeColor(hoveredBox.type),
+                              borderColor: getTypeColor(hoveredBox.type).replace('0.2', '0.5').replace('0.1', '0.4')
+                            }}
+                          >
+                            {hoveredBox.type}
+                          </span>
+                        </div>
+                        <div className="mt-2">
+                          <span className="font-semibold text-sm text-gray-900">Content:</span>
+                          <p className="text-xs mt-1 bg-white p-2 rounded whitespace-pre-wrap max-h-40 overflow-y-auto border border-gray-300 text-gray-900 shadow-sm">
+                            {hoveredBox.text}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600 italic mt-1">
+                        Hover over the PDF to view element details...
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Document statistics */}
+                  {analysisResult && (
+                    <div>
+                      <h3 className="font-medium text-gray-900 mb-2">Document Statistics:</h3>
+                      <ul className="text-sm space-y-2 text-gray-800">
+                        <li><span className="font-semibold">Pages:</span> {numPages}</li>
+                        <li><span className="font-semibold">Elements:</span> {analysisResult.length}</li>
+                        {/* Count types */}
+                        {(() => {
+                          const typeCounts: {[key: string]: number} = {};
+                          analysisResult.forEach(box => {
+                            typeCounts[box.type] = (typeCounts[box.type] || 0) + 1;
+                          });
+                          return (
+                            <>
+                              {Object.entries(typeCounts).map(([type, count]) => (
+                                <li key={type} className="ml-3 flex items-center">
+                                  <span 
+                                    className="inline-block w-3 h-3 mr-1 rounded-sm border border-gray-400"
+                                    style={{ backgroundColor: getTypeColor(type) }}
+                                  />
+                                  <span className="text-gray-800">{type}: {count}</span>
+                                </li>
+                              ))}
+                            </>
+                          );
+                        })()}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
             </div>
             
@@ -928,7 +941,14 @@ export default function Home() {
 
             {/* Chat Interface - Position to the right, outside of normal document flow */}
             <div className="w-full lg:w-1/4 h-[60vh] bg-white p-4 rounded-lg shadow flex flex-col">
-              {analysisResult && chatFileHash ? (
+              {isLoading ? (
+                /* Loading state for Chat */
+                <div className="flex-grow flex flex-col items-center justify-center text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-3"></div>
+                  <p className="text-gray-700 font-medium mb-1">Preparing chat functionality...</p>
+                  <p className="text-sm text-gray-500">You'll be able to chat with your document once analysis is complete.</p>
+                </div>
+              ) : analysisResult && chatFileHash ? (
                 <>
                   <h2 className="text-lg font-semibold mb-3 text-gray-800">Chat with Document</h2>
                   
