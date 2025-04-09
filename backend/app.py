@@ -40,6 +40,15 @@ except Exception as e:
     rag_handler = None
 # ---------------------------
 
+# Add missing function after OUTPUT_DIR definition
+
+# Define helper function to get the path to the Huridocs result file
+def get_huridocs_result_path(filehash):
+    """
+    Get the path to the Huridocs result file for a given file hash.
+    """
+    return os.path.join(OUTPUT_DIR, f"{filehash}.json")
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """
@@ -134,58 +143,156 @@ def analyze_pdf():
 # --- RAG Chat Endpoint ---
 @app.route('/api/chat/<string:filehash>', methods=['POST'])
 def chat_with_document(filehash):
-    print(f"\n--- Entered /api/chat/{filehash} endpoint ---")
     """
-    Handles chat queries for a specific, previously analyzed document.
-    Expects JSON: {"query": "user's question"}
-    Uses the filehash (SHA256 of the original PDF) to find the JSON analysis.
+    Endpoint to chat with a document using the RAG handler
     """
-    if rag_handler is None:
-        return jsonify({"error": "Chat features are disabled due to configuration error."}), 503
-
-    if not request.is_json:
-        return jsonify({"error": "Request must be JSON"}), 400
-
-    data = request.get_json()
-    query = data.get('query')
-
-    if not query:
-        return jsonify({"error": "Missing 'query' in request body"}), 400
-
-    # Construct the path to the analyzed JSON file
-    json_filename = f"{filehash}.json"
-    json_filepath = os.path.join(OUTPUT_DIR, json_filename)
-
-    # --- Debugging --- 
-    print(f"[Chat Endpoint Debug] CWD: {os.getcwd()}")
-    print(f"[Chat Endpoint Debug] Checking for file at: {os.path.abspath(json_filepath)}")
-    # -----------------
-
-    if not os.path.exists(json_filepath):
-        print(f"[Chat Endpoint Debug] File NOT found at {os.path.abspath(json_filepath)}.") # Add log here
-        return jsonify({"error": f"Analysis file for hash {filehash} not found. Please analyze the PDF first."}), 404
-
     try:
-        # Use the RAG handler to query the document
-        # The handler manages loading/indexing internally
-        result = rag_handler.query(json_filepath, query)
+        # Validate incoming data
+        data = request.json
+        if not data or 'query' not in data:
+            return jsonify({"error": "Missing query in request body"}), 400
         
-        if "error" in result:
-             # Handle errors reported by the RAG handler itself
-             status_code = 500 # Internal Server Error by default
-             if "not found or failed to index" in result["error"]:
-                  status_code = 404 # Not Found
-             return jsonify(result), status_code
+        query = data['query']
         
-        # Add the query to the response for context
-        result["user_query"] = query
-        return jsonify(result), 200
-
+        # Check if the file exists in our file cache
+        huridocs_json_file = get_huridocs_result_path(filehash)
+        
+        if not os.path.exists(huridocs_json_file):
+            return jsonify({"error": f"Document with hash {filehash} not found or not analyzed yet."}), 404
+        
+        # Query the document using our RAG handler
+        result = rag_handler.query(huridocs_json_file, query)
+        
+        return jsonify(result)
+    
     except Exception as e:
-        # Catch unexpected errors during the query process
-        print(f"Unexpected error during chat query for {filehash}: {e}")
-        return jsonify({"error": "An unexpected error occurred processing your chat request."}), 500
-# -----------------------
+        print(f"Error in chat endpoint: {e}")
+        return jsonify({"error": f"Chat processing error: {str(e)}"}), 500
+
+@app.route('/api/summarize/<string:filehash>', methods=['GET'])
+def summarize_document_sections(filehash):
+    """
+    Endpoint to generate summaries for all text segments in a document.
+    Returns a mapping of segment IDs to their summaries.
+    Supports returning partial results if the parameter 'partial=true' is present.
+    Supports resuming generation if the parameter 'resume=true' is present.
+    """
+    try:
+        # Check if client wants partial results or to resume generation
+        return_partial = request.args.get('partial', 'false').lower() == 'true'
+        resume_generation = request.args.get('resume', 'false').lower() == 'true'
+        
+        # Check if the file exists in our file cache
+        huridocs_json_file = get_huridocs_result_path(filehash)
+        
+        if not os.path.exists(huridocs_json_file):
+            return jsonify({"error": f"Document with hash {filehash} not found or not analyzed yet."}), 404
+        
+        # Check if we already have summaries cached (partial or complete)
+        summary_cache_file = huridocs_json_file.replace('.json', '_summaries.json')
+        
+        # If client wants partial results and they exist, return them immediately
+        if return_partial and os.path.exists(summary_cache_file):
+            print(f"Loading partial summaries for {filehash}")
+            with open(summary_cache_file, 'r') as f:
+                summaries = json.load(f)
+            
+            # Determine if these are partial or complete results
+            is_complete = False
+            
+            # Check if we have a record of total segments for this file
+            total_segments_file = huridocs_json_file.replace('.json', '_total_segments.txt')
+            if os.path.exists(total_segments_file):
+                try:
+                    with open(total_segments_file, 'r') as f:
+                        total_segments = int(f.read().strip())
+                        is_complete = len(summaries) >= total_segments
+                except Exception:
+                    is_complete = False
+            
+            return jsonify({
+                "summaries": summaries, 
+                "is_partial": not is_complete,
+                "count": len(summaries),
+                "status": "in_progress" if not is_complete else "complete"
+            })
+        
+        # If complete summaries are requested and exist (and we're not being asked to resume)
+        if os.path.exists(summary_cache_file) and not return_partial and not resume_generation:
+            print(f"Loading cached summaries for {filehash}")
+            with open(summary_cache_file, 'r') as f:
+                summaries = json.load(f)
+            
+            # To better support the frontend progress display, count the total segments
+            try:
+                with open(huridocs_json_file, 'r') as f:
+                    data = json.load(f)
+                    
+                # Count approximately how many segments are in the document
+                total_segments = 0
+                if isinstance(data, list):
+                    total_segments = len(data)
+                elif isinstance(data, dict) and 'pages' in data:
+                    for page in data['pages']:
+                        if 'texts' in page:
+                            total_segments += len(page['texts'])
+                        elif 'items' in page:
+                            for item in page['items']:
+                                if item.get('type') == 'text':
+                                    total_segments += 1
+                
+                # Save total segments count for future reference
+                with open(total_segments_file, 'w') as f:
+                    f.write(str(total_segments))
+                
+                is_complete = len(summaries) >= total_segments
+                
+            except Exception as e:
+                print(f"Error counting total segments: {e}")
+                is_complete = True  # Assume complete if we can't determine
+            
+            return jsonify({
+                "summaries": summaries,
+                "is_partial": not is_complete,
+                "count": len(summaries),
+                "status": "complete" if is_complete else "in_progress"
+            })
+        
+        # Generate summaries using the RAG handler (or resume generation)
+        if resume_generation:
+            print(f"Resuming summary generation for {filehash}")
+        else:
+            print(f"Starting new summary generation for {filehash}")
+            
+        success, result = rag_handler.load_and_index_with_summaries(huridocs_json_file)
+        
+        if not success:
+            # If there are partial results but the complete generation failed
+            if os.path.exists(summary_cache_file):
+                with open(summary_cache_file, 'r') as f:
+                    partial_results = json.load(f)
+                
+                if partial_results:
+                    return jsonify({
+                        "summaries": partial_results,
+                        "is_partial": True,
+                        "count": len(partial_results),
+                        "status": "failed",
+                        "error": result
+                    })
+            
+            return jsonify({"error": result}), 500
+        
+        return jsonify({
+            "summaries": result,
+            "is_partial": False,
+            "count": len(result),
+            "status": "complete"
+        })
+    
+    except Exception as e:
+        print(f"Error in summarize endpoint: {e}")
+        return jsonify({"error": f"Summary generation error: {str(e)}"}), 500
 
 # Add other API routes here later, e.g., for huridocs interaction
 

@@ -23,6 +23,7 @@ interface SegmentBox {
   page_height: number;
   text: string;
   type: string; // "Caption", "Footnote", "Formula", "List item", "Page footer", "Page header", "Picture", "Section header", "Table", "Text", "Title"
+  bbox?: number[]; // Added bbox property
 }
 
 // Interface for chat messages
@@ -31,6 +32,23 @@ interface ChatMessage {
   text: string;
   sources?: any[]; // Optional: To store source document snippets
   id?: string; // Add unique identifier for tracking expanded state
+}
+
+// New interface for document summaries
+interface DocumentSummary {
+  summary: string;
+  text: string;
+  page: number;
+  bbox: number[];
+}
+
+// New interface for summary response
+interface SummaryResponse {
+  summaries: Record<string, DocumentSummary>;
+  is_partial: boolean;
+  count: number;
+  status: 'in_progress' | 'complete' | 'failed';
+  error?: string;
 }
 
 // Helper function to get a color based on segment type
@@ -94,6 +112,21 @@ export default function Home() {
   const [chatError, setChatError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null); // Ref to scroll chat to bottom
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set()); // Track expanded sources
+
+  // New state variables for summaries
+  const [summaries, setSummaries] = useState<Record<string, DocumentSummary> | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState<boolean>(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [showSummaries, setShowSummaries] = useState<boolean>(false);
+  
+  // New state variable for document statistics section
+  const [showStatistics, setShowStatistics] = useState<boolean>(false);
+
+  // New state variable to track highlighted summary block
+  const [highlightedSummaryId, setHighlightedSummaryId] = useState<string | null>(null);
+
+  // Add a new state variable for summary search
+  const [summarySearchQuery, setSummarySearchQuery] = useState<string>("");
 
   // Configure worker on component mount
   useEffect(() => {
@@ -425,6 +458,15 @@ export default function Home() {
     }
   };
 
+  // Function to handle mouse click on the PDF container
+  const handleContainerClick = (e: React.MouseEvent) => {
+    // Only handle clicks directly on the container (not on boxes)
+    if (e.target === e.currentTarget) {
+      setClickedBox(null);
+      setHighlightedSummaryId(null);
+    }
+  };
+
   const handleMouseLeave = () => {
     setHoveredBox(null);
   };
@@ -458,7 +500,10 @@ export default function Home() {
         if (!response.ok) {
             const errorText = await response.text();
             let errorMsg = `Chat API error! status: ${response.status}`;
-            try { errorData = JSON.parse(errorText); errorMsg = errorData.error || errorMsg; } 
+            try { 
+              const errorData = JSON.parse(errorText); 
+              errorMsg = errorData.error || errorMsg; 
+            } 
             catch (parseError) { errorMsg = errorText || errorMsg; }
             throw new Error(errorMsg);
         }
@@ -711,6 +756,142 @@ export default function Home() {
     }
   };
 
+  // Update fetchSummaries to handle partial results and auto-refresh
+  const fetchSummaries = async (getPartial: boolean = false, resume: boolean = false) => {
+    if (!chatFileHash) {
+      setSummaryError("No document available for summarization.");
+      return;
+    }
+    
+    setIsSummaryLoading(true);
+    setSummaryError(null);
+    
+    try {
+      const url = `/api/summarize/${chatFileHash}${getPartial ? '?partial=true' : ''}${resume ? (getPartial ? '&' : '?') + 'resume=true' : ''}`;
+      console.log(`Fetching summaries for document with hash ${chatFileHash.substring(0,8)}...${getPartial ? ' (partial)' : ''}${resume ? ' (resuming generation)' : ''}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to fetch summaries: ${response.status}`);
+      }
+      
+      const result: SummaryResponse = await response.json();
+      console.log("Summaries fetched:", result);
+      
+      if (result.summaries) {
+        setSummaries(result.summaries);
+        // Don't automatically show summaries when generated
+        // setShowSummaries(true);
+        
+        // If it's a partial result, schedule a refresh
+        if (result.is_partial && result.status === 'in_progress') {
+          // Set a progress message
+          setSummaryError(`Loading summaries: ${result.count} segments processed so far...`);
+          
+          // Schedule refresh in 5 seconds
+          setTimeout(() => {
+            if (document.hasFocus()) { // Only refresh if the page is still in focus
+              fetchSummaries(true);
+            }
+          }, 5000);
+        } else if (result.status === 'failed') {
+          setSummaryError(`Generation incomplete: ${result.error || 'Unknown error'}`);
+        } else {
+          setSummaryError(null);
+        }
+      } else {
+        throw new Error("No summaries returned from the server");
+      }
+    } catch (error) {
+      console.error("Error fetching summaries:", error);
+      setSummaryError(error instanceof Error ? error.message : "Unknown error fetching summaries");
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  };
+
+  // Add this function to get initial partial results quickly and resume generation
+  const startSummaryGeneration = async () => {
+    // First check for partial results
+    await fetchSummaries(true);
+    // Then request full generation with resume=true to continue from where it left off
+    await fetchSummaries(false, true);
+  };
+
+  // Function to handle clicking on a summary
+  const handleSummaryClick = (id: string, summary: DocumentSummary) => {
+    // Find the corresponding box in the analysis result based on the page and bbox
+    if (analysisResult) {
+      const matchingBox = analysisResult.find(box => 
+        box.page_number === summary.page && 
+        JSON.stringify(box.bbox) === JSON.stringify(summary.bbox)
+      );
+      
+      if (matchingBox) {
+        // Set the clicked box to highlight it on the PDF
+        setClickedBox(matchingBox);
+        
+        // Highlight just this summary
+        setHighlightedSummaryId(id);
+        
+        // Scroll to the relevant page if possible
+        const pageElement = document.querySelector(`[data-page-number="${summary.page}"]`);
+        if (pageElement && containerRef.current) {
+          containerRef.current.scrollTo({
+            top: pageElement.getBoundingClientRect().top + containerRef.current.scrollTop - 100,
+            behavior: 'smooth'
+          });
+        }
+      }
+    }
+  };
+
+  // Function to toggle the expansion of sources for a message
+  const toggleSourceExpansion = (messageId: string) => {
+    setExpandedSources(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  // Find or create a function to get summary for a specific element
+  const findSummaryForElement = (box: SegmentBox | null): DocumentSummary | null => {
+    if (!box || !summaries) return null;
+    
+    // Try to find a matching summary based on page number and bbox
+    return Object.entries(summaries).reduce((match, [id, summary]) => {
+      if (match) return match;
+      
+      // Check if this summary matches the box (same page and similar position)
+      if (summary.page === box.page_number && 
+          box.bbox && summary.bbox && 
+          JSON.stringify(box.bbox) === JSON.stringify(summary.bbox)) {
+        return summary;
+      }
+      
+      // Alternative matching if bbox isn't matching precisely
+      // Check if this summary text matches or contains the box text
+      if (summary.page === box.page_number && 
+          (summary.text === box.text || 
+           summary.text.includes(box.text) || 
+           box.text.includes(summary.text))) {
+        return summary;
+      }
+      
+      return null;
+    }, null as DocumentSummary | null);
+  };
+
   return (
     <main className="flex min-h-screen flex-col p-4 md:p-8 lg:p-12 bg-gray-50">
       {/* Reading Indicator - Made clickable to stop reading */}
@@ -817,7 +998,48 @@ export default function Home() {
           <div className="w-full flex flex-col lg:flex-row gap-6">
             {/* Metadata Panel - Slightly reduce width */}
             <div className="w-full lg:w-1/6 h-[70vh] bg-white p-4 rounded-lg shadow-md border border-gray-200 flex flex-col overflow-auto">
-              <h2 className="text-lg font-bold mb-4 text-gray-900">Document Elements</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-gray-900">Document Elements</h2>
+                {chatFileHash && (
+                  <button
+                    onClick={startSummaryGeneration}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      isSummaryLoading 
+                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                    disabled={isSummaryLoading}
+                    title="Generate summaries for document elements"
+                  >
+                    {showSummaries ? 'Refresh Summaries' : 'Generate Summaries'}
+                  </button>
+                )}
+              </div>
+              
+              {isSummaryLoading && (
+                <div className="flex items-center justify-center mb-3">
+                  <div className="animate-pulse h-4 w-4 bg-blue-500 rounded-full mr-2"></div>
+                  <span className="text-sm text-gray-500">Generating summaries...</span>
+                </div>
+              )}
+              
+              {summaryError && (
+                <div className="mb-3 p-2 bg-red-100 text-red-700 rounded text-xs">
+                  {summaryError}
+                </div>
+              )}
+              
+              {/* Add a toggle for showing all summaries */}
+              {summaries && Object.keys(summaries).length > 0 && (
+                <div className="mt-2 mb-3 flex justify-end">
+                  <button
+                    onClick={() => setShowSummaries(!showSummaries)}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    {showSummaries ? 'Hide All Summaries' : 'Show All Summaries'}
+                  </button>
+                </div>
+              )}
               
               {isLoading ? (
                 /* Loading state for Document Elements */
@@ -829,6 +1051,85 @@ export default function Home() {
               ) : (
                 /* Normal content when not loading */
                 <>
+                  {/* Summaries Section - Show if available and requested */}
+                  {showSummaries && summaries && (
+                    <div className="mb-4 border-b border-gray-300 pb-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-medium text-gray-900">Document Summaries</h3>
+                        {summaryError && !summaryError.startsWith("Loading") && (
+                          <span className="text-xs text-red-600">{summaryError}</span>
+                        )}
+                      </div>
+                      
+                      {/* Progress indicator for loading */}
+                      {summaryError && summaryError.startsWith("Loading") && (
+                        <div className="flex items-center mb-2 bg-blue-50 p-2 rounded">
+                          <div className="animate-pulse h-2 w-2 bg-blue-500 rounded-full mr-2"></div>
+                          <span className="text-xs text-blue-700">{summaryError}</span>
+                        </div>
+                      )}
+                      
+                      {/* Add search input for summaries */}
+                      <div className="mb-2">
+                        <input
+                          type="text"
+                          value={summarySearchQuery}
+                          onChange={(e) => setSummarySearchQuery(e.target.value)}
+                          placeholder="Search summaries..."
+                          className="w-full p-1 text-sm border border-gray-300 rounded"
+                        />
+                      </div>
+                      
+                      <div className="max-h-[200px] overflow-y-auto pr-1">
+                        {/* Filter summaries based on search query */}
+                        {summaries && Object.entries(summaries).length > 0 ? (
+                          Object.entries(summaries)
+                            .filter(([id, summary]) => 
+                              summarySearchQuery === "" || 
+                              summary.summary.toLowerCase().includes(summarySearchQuery.toLowerCase()) ||
+                              summary.text.toLowerCase().includes(summarySearchQuery.toLowerCase())
+                            )
+                            .map(([id, summary]) => (
+                              <div 
+                                key={id} 
+                                className={`mb-2 p-2 rounded border cursor-pointer transition-colors ${
+                                  highlightedSummaryId === id 
+                                    ? 'bg-blue-200 border-blue-400' 
+                                    : 'bg-blue-50 border-blue-100 hover:bg-blue-100'
+                                }`}
+                                onClick={() => handleSummaryClick(id, summary)}
+                              >
+                                <div className="text-xs text-gray-500 mb-1">
+                                  Page {summary.page} | ID: {id.substring(0, 6)}...
+                                </div>
+                                <div className="text-sm text-gray-800 mb-1">
+                                  {summary.summary}
+                                </div>
+                                <div className="text-xs text-gray-600 italic truncate">
+                                  Original: {summary.text.substring(0, 50)}...
+                                </div>
+                              </div>
+                            ))
+                        ) : (
+                          <p className="text-sm text-gray-600 italic">No summaries available for this document.</p>
+                        )}
+                      </div>
+                      <div className="flex justify-between mt-2">
+                        <button
+                          onClick={() => setShowSummaries(false)}
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                        >
+                          Hide Summaries
+                        </button>
+                        {summaries && Object.keys(summaries).length > 0 && (
+                          <span className="text-xs text-gray-500">
+                            {Object.keys(summaries).length} summaries
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* Current hover information */}
                   <div className="border-b border-gray-300 pb-3 mb-3">
                     <p className="font-medium text-gray-900">Currently Hovering:</p>
@@ -846,6 +1147,30 @@ export default function Home() {
                             {hoveredBox.type}
                           </span>
                         </div>
+                        
+                        {/* Display summary if available */}
+                        {summaries && (
+                          <div className="mt-2">
+                            <span className="font-semibold text-sm text-gray-900">Summary:</span>
+                            {(() => {
+                              const summary = findSummaryForElement(hoveredBox);
+                              if (summary) {
+                                return (
+                                  <p className="text-xs mt-1 bg-blue-50 p-2 rounded whitespace-pre-wrap border border-blue-100 text-gray-800">
+                                    {summary.summary}
+                                  </p>
+                                );
+                              } else {
+                                return (
+                                  <p className="text-xs mt-1 italic text-gray-500">
+                                    {isSummaryLoading ? "Loading summaries..." : "No summary available"}
+                                  </p>
+                                );
+                              }
+                            })()}
+                          </div>
+                        )}
+                        
                         <div className="mt-2">
                           <span className="font-semibold text-sm text-gray-900">Content:</span>
                           <p className="text-xs mt-1 bg-white p-2 rounded whitespace-pre-wrap max-h-40 overflow-y-auto border border-gray-300 text-gray-900 shadow-sm">
@@ -862,32 +1187,51 @@ export default function Home() {
                   
                   {/* Document statistics */}
                   {analysisResult && (
-                    <div>
-                      <h3 className="font-medium text-gray-900 mb-2">Document Statistics:</h3>
-                      <ul className="text-sm space-y-2 text-gray-800">
-                        <li><span className="font-semibold">Pages:</span> {numPages}</li>
-                        <li><span className="font-semibold">Elements:</span> {analysisResult.length}</li>
-                        {/* Count types */}
-                        {(() => {
-                          const typeCounts: {[key: string]: number} = {};
-                          analysisResult.forEach(box => {
-                            typeCounts[box.type] = (typeCounts[box.type] || 0) + 1;
-                          });
-                          return (
-                            <>
-                              {Object.entries(typeCounts).map(([type, count]) => (
-                                <li key={type} className="ml-3 flex items-center">
-                                  <span 
-                                    className="inline-block w-3 h-3 mr-1 rounded-sm border border-gray-400"
-                                    style={{ backgroundColor: getTypeColor(type) }}
-                                  />
-                                  <span className="text-gray-800">{type}: {count}</span>
-                                </li>
-                              ))}
-                            </>
-                          );
-                        })()}
-                      </ul>
+                    <div className="border-t border-gray-200 pt-3 mt-3">
+                      <div 
+                        className="flex justify-between items-center cursor-pointer" 
+                        onClick={() => setShowStatistics(!showStatistics)}
+                      >
+                        <h3 className="font-medium text-gray-900">Document Statistics</h3>
+                        <button className="text-gray-500 focus:outline-none">
+                          <svg 
+                            className={`w-4 h-4 transition-transform ${showStatistics ? 'rotate-180' : ''}`} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24" 
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"></path>
+                          </svg>
+                        </button>
+                      </div>
+                      
+                      {showStatistics && (
+                        <ul className="text-sm space-y-2 text-gray-800 mt-2">
+                          <li><span className="font-semibold">Pages:</span> {numPages}</li>
+                          <li><span className="font-semibold">Elements:</span> {analysisResult.length}</li>
+                          {/* Count types */}
+                          {(() => {
+                            const typeCounts: {[key: string]: number} = {};
+                            analysisResult.forEach(box => {
+                              typeCounts[box.type] = (typeCounts[box.type] || 0) + 1;
+                            });
+                            return (
+                              <>
+                                {Object.entries(typeCounts).map(([type, count]) => (
+                                  <li key={type} className="ml-3 flex items-center">
+                                    <span 
+                                      className="inline-block w-3 h-3 mr-1 rounded-sm border border-gray-400"
+                                      style={{ backgroundColor: getTypeColor(type) }}
+                                    />
+                                    <span className="text-gray-800">{type}: {count}</span>
+                                  </li>
+                                ))}
+                              </>
+                            );
+                          })()}
+                        </ul>
+                      )}
                     </div>
                   )}
                 </>
@@ -899,6 +1243,7 @@ export default function Home() {
               ref={containerRef}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
+              onClick={handleContainerClick}
               className="w-full lg:w-1/2 h-[70vh] overflow-auto border border-gray-300 rounded-lg shadow bg-white relative"
             >
               <Document
