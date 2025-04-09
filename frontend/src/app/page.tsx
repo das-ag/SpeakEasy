@@ -432,8 +432,8 @@ export default function Home() {
         <h1 className="text-4xl md:text-5xl font-bold text-gray-800">SpeakEasy</h1>
       </div>
 
-      {/* Main content container */}
-      <div className="w-full max-w-7xl flex flex-col">
+      {/* Main content container - Increase max width to accommodate all panels */}
+      <div className="w-full max-w-[95vw] flex flex-col">
         {/* --- File Upload Form --- Left aligned */}
         <form onSubmit={handleSubmit} className="w-full max-w-lg bg-white p-6 rounded-lg shadow mb-8 self-start">
           <div className="mb-4">
@@ -461,21 +461,21 @@ export default function Home() {
           {error && <p className="text-red-500 text-xs italic mt-4">Error: {error}</p>}
         </form>
 
-        {/* --- PDF Viewer and Metadata Panel --- */}
+        {/* --- PDF Viewer and Chat Container */}
         {fileUrl ? (
           <div className="w-full flex flex-col lg:flex-row gap-6">
-            {/* Metadata Panel - Always visible to the left of PDF */}
-            <div className="w-full lg:w-1/6 h-[70vh] bg-white p-4 rounded-lg shadow flex flex-col overflow-auto">
-              <h2 className="text-lg font-semibold mb-4 text-gray-800">Document Elements</h2>
+            {/* Metadata Panel - Slightly reduce width */}
+            <div className="w-full lg:w-1/6 h-[70vh] bg-white p-4 rounded-lg shadow-md border border-gray-200 flex flex-col overflow-auto">
+              <h2 className="text-lg font-bold mb-4 text-gray-900">Document Elements</h2>
               {/* Current hover information */}
-              <div className="border-b pb-3 mb-3">
-                <p className="font-medium text-gray-700">Currently Hovering:</p>
+              <div className="border-b border-gray-300 pb-3 mb-3">
+                <p className="font-medium text-gray-900">Currently Hovering:</p>
                 {hoveredBox ? (
                   <div className="mt-2">
                     <div className="flex items-center mb-1">
-                      <span className="font-semibold text-sm">Type:</span>
+                      <span className="font-semibold text-sm text-gray-900">Type:</span>
                       <span 
-                        className="ml-2 px-2 py-1 text-xs rounded-md"
+                        className="ml-2 px-2 py-1 text-xs rounded-md font-medium text-gray-900 border"
                         style={{
                           backgroundColor: getTypeColor(hoveredBox.type),
                           borderColor: getTypeColor(hoveredBox.type).replace('0.2', '0.5').replace('0.1', '0.4')
@@ -485,14 +485,14 @@ export default function Home() {
                       </span>
                     </div>
                     <div className="mt-2">
-                      <span className="font-semibold text-sm">Content:</span>
-                      <p className="text-xs mt-1 bg-gray-50 p-2 rounded whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      <span className="font-semibold text-sm text-gray-900">Content:</span>
+                      <p className="text-xs mt-1 bg-white p-2 rounded whitespace-pre-wrap max-h-40 overflow-y-auto border border-gray-300 text-gray-900 shadow-sm">
                         {hoveredBox.text}
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 italic mt-1">
+                  <p className="text-sm text-gray-600 italic mt-1">
                     Hover over the PDF to view element details...
                   </p>
                 )}
@@ -501,8 +501,8 @@ export default function Home() {
               {/* Document statistics */}
               {analysisResult && (
                 <div>
-                  <h3 className="font-medium text-gray-700 mb-2">Document Statistics:</h3>
-                  <ul className="text-sm space-y-1">
+                  <h3 className="font-medium text-gray-900 mb-2">Document Statistics:</h3>
+                  <ul className="text-sm space-y-2 text-gray-800">
                     <li><span className="font-semibold">Pages:</span> {numPages}</li>
                     <li><span className="font-semibold">Elements:</span> {analysisResult.length}</li>
                     {/* Count types */}
@@ -516,10 +516,10 @@ export default function Home() {
                           {Object.entries(typeCounts).map(([type, count]) => (
                             <li key={type} className="ml-3 flex items-center">
                               <span 
-                                className="inline-block w-3 h-3 mr-1 rounded-sm"
+                                className="inline-block w-3 h-3 mr-1 rounded-sm border border-gray-400"
                                 style={{ backgroundColor: getTypeColor(type) }}
                               />
-                              {type}: {count}
+                              <span className="text-gray-800">{type}: {count}</span>
                             </li>
                           ))}
                         </>
@@ -530,12 +530,12 @@ export default function Home() {
               )}
             </div>
             
-            {/* PDF Viewer - middle section */}
+            {/* PDF Viewer - Keep width the same as when no chat */}
             <div 
               ref={containerRef}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
-              className={`w-full ${analysisResult && chatFileHash ? 'lg:w-3/5' : 'lg:w-5/6'} h-[70vh] overflow-auto border border-gray-300 rounded-lg shadow bg-white relative`}
+              className="w-full lg:w-1/2 h-[70vh] overflow-auto border border-gray-300 rounded-lg shadow bg-white relative"
             >
               <Document
                 file={fileUrl}
@@ -585,103 +585,113 @@ export default function Home() {
               </Document>
             </div>
 
-            {/* --- Chat Interface --- Only shown when analysis is complete and chat hash is available */}
-            {analysisResult && chatFileHash && (
-              <div className="w-full lg:w-1/4 h-[70vh] bg-white p-4 rounded-lg shadow flex flex-col">
-                <h2 className="text-lg font-semibold mb-4 text-gray-800">Chat with Document</h2>
-                
-                {/* Chat History Display - Made taller to match PDF height */}
-                <div className="flex-grow overflow-y-auto border border-gray-200 rounded p-3 mb-4 bg-gray-50">
-                  {chatHistory.map((msg, index) => (
-                    <div key={index} className={`mb-3 ${
-                        msg.sender === 'user' ? 'text-right' : 'text-left'
-                      }`}>
-                      <span className={`inline-block p-2 rounded-lg max-w-full break-words ${
-                          msg.sender === 'user' 
-                          ? 'bg-blue-500 text-white' 
-                          : 'bg-gray-200 text-gray-800'
+            {/* Chat Interface - Position to the right, outside of normal document flow */}
+            <div className="w-full lg:w-1/4 h-[70vh] bg-white p-4 rounded-lg shadow flex flex-col">
+              {analysisResult && chatFileHash ? (
+                <>
+                  <h2 className="text-lg font-semibold mb-4 text-gray-800">Chat with Document</h2>
+                  
+                  {/* Chat History Display */}
+                  <div className="flex-grow overflow-y-auto border border-gray-200 rounded p-3 mb-4 bg-gray-50">
+                    {chatHistory.map((msg, index) => (
+                      <div key={index} className={`mb-3 ${
+                          msg.sender === 'user' ? 'text-right' : 'text-left'
                         }`}>
-                        {msg.text}
-                        {/* Sources for bot messages with toggle functionality */}
-                        {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-gray-300 text-xs text-left">
-                            <button 
-                              onClick={(e) => {
-                                e.preventDefault(); // Prevent form submission
-                                if (msg.id) toggleSourceExpansion(msg.id);
-                              }} 
-                              className="font-semibold mb-1 text-blue-600 hover:text-blue-800 flex items-center"
-                            >
-                              Sources: ({msg.sources.length})
-                              <svg 
-                                className={`ml-1 w-4 h-4 transition-transform duration-200 ${
-                                  msg.id && expandedSources.has(msg.id) ? 'transform rotate-180' : ''
-                                }`} 
-                                fill="none" 
-                                stroke="currentColor" 
-                                viewBox="0 0 24 24" 
-                                xmlns="http://www.w3.org/2000/svg"
+                        <span className={`inline-block p-2 rounded-lg max-w-full break-words ${
+                            msg.sender === 'user' 
+                            ? 'bg-blue-500 text-white' 
+                            : 'bg-gray-200 text-gray-800'
+                          }`}>
+                          {msg.text}
+                          {/* Sources for bot messages with toggle functionality */}
+                          {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-gray-300 text-xs text-left">
+                              <button 
+                                onClick={(e) => {
+                                  e.preventDefault(); // Prevent form submission
+                                  if (msg.id) toggleSourceExpansion(msg.id);
+                                }} 
+                                className="font-semibold mb-1 text-blue-600 hover:text-blue-800 flex items-center"
                               >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                              </svg>
-                            </button>
-                            {msg.id && expandedSources.has(msg.id) && (
-                              <ul>
-                                {msg.sources.map((source, s_idx) => (
-                                  <li key={s_idx} title={JSON.stringify(source.metadata)} className="mb-1 p-1 bg-gray-100 rounded break-words overflow-hidden">
-                                    [...{source.metadata.page_number ? `P${source.metadata.page_number}` : 'N/A'}] {source.content_preview}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                  {/* Loading indicator for chat response */}
-                  {isChatLoading && (
-                      <div className="text-left mb-3">
-                          <span className="inline-block p-2 rounded-lg bg-gray-200 text-gray-500 animate-pulse">
-                              Thinking...
-                          </span>
+                                Sources: ({msg.sources.length})
+                                <svg 
+                                  className={`ml-1 w-4 h-4 transition-transform duration-200 ${
+                                    msg.id && expandedSources.has(msg.id) ? 'transform rotate-180' : ''
+                                  }`} 
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  viewBox="0 0 24 24" 
+                                  xmlns="http://www.w3.org/2000/svg"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                              </button>
+                              {msg.id && expandedSources.has(msg.id) && (
+                                <ul>
+                                  {msg.sources.map((source, s_idx) => (
+                                    <li key={s_idx} title={JSON.stringify(source.metadata)} className="mb-1 p-1 bg-gray-100 rounded break-words overflow-hidden">
+                                      [...{source.metadata.page_number ? `P${source.metadata.page_number}` : 'N/A'}] {source.content_preview}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          )}
+                        </span>
                       </div>
-                  )}
-                  {/* Error display for chat */}
-                  {chatError && (
-                      <div className="text-left mb-3">
-                          <span className="inline-block p-2 rounded-lg bg-red-100 text-red-700 break-words">
-                              Error: {chatError}
-                          </span>
-                      </div>
-                  )}
-                  {/* Dummy div to ensure scrolling to bottom */}
-                  <div ref={chatEndRef} /> 
-                </div>
+                    ))}
+                    {/* Loading indicator for chat response */}
+                    {isChatLoading && (
+                        <div className="text-left mb-3">
+                            <span className="inline-block p-2 rounded-lg bg-gray-200 text-gray-500 animate-pulse">
+                                Thinking...
+                            </span>
+                        </div>
+                    )}
+                    {/* Error display for chat */}
+                    {chatError && (
+                        <div className="text-left mb-3">
+                            <span className="inline-block p-2 rounded-lg bg-red-100 text-red-700 break-words">
+                                Error: {chatError}
+                            </span>
+                        </div>
+                    )}
+                    {/* Dummy div to ensure scrolling to bottom */}
+                    <div ref={chatEndRef} /> 
+                  </div>
 
-                {/* Chat Input Form - Fixed at bottom */}
-                <form onSubmit={handleChatSubmit} className="flex items-center mt-auto">
-                  <input
-                    type="text"
-                    value={chatQuery}
-                    onChange={(e) => setChatQuery(e.target.value)}
-                    placeholder="Ask a question..."
-                    className="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
-                    disabled={isChatLoading}
-                    required
-                  />
-                  <button
-                    type="submit"
-                    disabled={isChatLoading || !chatQuery.trim()}
-                    className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
-                      isChatLoading || !chatQuery.trim() ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    Send
-                  </button>
-                </form>
-              </div>
-            )}
+                  {/* Chat Input Form - Fixed at bottom */}
+                  <form onSubmit={handleChatSubmit} className="flex items-center mt-auto">
+                    <input
+                      type="text"
+                      value={chatQuery}
+                      onChange={(e) => setChatQuery(e.target.value)}
+                      placeholder="Ask a question..."
+                      className="flex-grow shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
+                      disabled={isChatLoading}
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={isChatLoading || !chatQuery.trim()}
+                      className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                        isChatLoading || !chatQuery.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      Send
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
+                  <svg className="w-12 h-12 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                  </svg>
+                  <p className="text-sm mb-2">Chat will appear here</p>
+                  <p className="text-xs">Click "Analyze Document" to enable chat</p>
+                </div>
+              )}
+            </div>
           </div>
         ) : !isLoading && (
           <p className="text-gray-500">Upload a PDF to view it here.</p>
