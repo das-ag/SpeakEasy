@@ -1,0 +1,33 @@
+# environment.yml
+name: speakeasy
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # --- Core Python ---
+  - python=3.11         # Pin Python version used in the environment
+  - pip                 # Include pip for packages not on conda
+
+  # --- Jupyter/Notebook ---
+  - ipykernel           # For running notebooks
+  - notebook            # Jupyter Notebook interface
+
+  # --- LangChain & Google AI ---
+  - langchain           # Core LangChain library
+  - langchain-core      # LangChain core components
+  - langchain-community # LangChain community integrations
+  - langchain-text-splitters # Text splitting utilities
+  - faiss-cpu           # FAISS for vector storage (CPU version)
+  - python-dotenv       # For loading .env files
+  - pydantic >=2.11     # Data validation library (ensure compatible version)
+
+  # --- Web Backend (from requirements.txt) ---
+  - flask               # Web framework
+  - requests            # HTTP library
+
+  # --- Other Dependencies (Implicit) ---
+  - numpy               # Required by FAISS and others
+
+  # --- Pip-only packages ---
+  - pip:
+    - langchain-google-genai  # Google Generative AI integrations for LangChain 
