@@ -134,6 +134,7 @@ def analyze_pdf():
 # --- RAG Chat Endpoint ---
 @app.route('/api/chat/<string:filehash>', methods=['POST'])
 def chat_with_document(filehash):
+    print(f"\n--- Entered /api/chat/{filehash} endpoint ---")
     """
     Handles chat queries for a specific, previously analyzed document.
     Expects JSON: {"query": "user's question"}
@@ -155,7 +156,13 @@ def chat_with_document(filehash):
     json_filename = f"{filehash}.json"
     json_filepath = os.path.join(OUTPUT_DIR, json_filename)
 
+    # --- Debugging --- 
+    print(f"[Chat Endpoint Debug] CWD: {os.getcwd()}")
+    print(f"[Chat Endpoint Debug] Checking for file at: {os.path.abspath(json_filepath)}")
+    # -----------------
+
     if not os.path.exists(json_filepath):
+        print(f"[Chat Endpoint Debug] File NOT found at {os.path.abspath(json_filepath)}.") # Add log here
         return jsonify({"error": f"Analysis file for hash {filehash} not found. Please analyze the PDF first."}), 404
 
     try:
