@@ -386,9 +386,10 @@ export default function Home() {
 
     // If no page is actively hovered (e.g., in margins), exit
     if (hoveredPageNumber === null) {
-        if (hoveredBox !== null) {
-             setHoveredBox(null); // Clear hover if mouse moved out of all pages
-        }
+        // Don't clear hoveredBox anymore - we want it to persist
+        // if (hoveredBox !== null) {
+        //     setHoveredBox(null); // Clear hover if mouse moved out of all pages
+        // }
         return;
     }
 
@@ -399,12 +400,13 @@ export default function Home() {
 
     if (!currentPageElement || !canvasElement || canvasElement.offsetWidth <= 0 || canvasElement.offsetHeight <= 0) {
         console.error("Could not find valid page element or canvas for hover calculation.");
-        if (hoveredBox !== null) setHoveredBox(null); // Clear hover if calculation fails
+        // Don't clear hoveredBox anymore - we want it to persist
+        // if (hoveredBox !== null) setHoveredBox(null); // Clear hover if calculation fails
         return;
     }
 
     const renderedWidth = canvasElement.offsetWidth; // Use canvas width
-    const renderedHeight = canvasElement.offsetHeight; // Use canvas height
+    const renderedHeight = canvasElement.offsetHeight;
     const pageOffsetTop = currentPageElement.offsetTop;
     const pageOffsetLeft = currentPageElement.offsetLeft;
 
@@ -452,8 +454,8 @@ export default function Home() {
     // Log the final key before setting state
     console.log(`Final foundBox: ${foundBox ? 'Exists' : 'null'}, Previous hoveredBox: ${hoveredBox ? 'Exists' : 'null'}`); // Simplified log
 
-    // Update state if the hovered box object has changed
-    if (foundBox !== hoveredBox) {
+    // Only update state if we found a box (don't clear hoveredBox if we didn't find one)
+    if (foundBox !== null) {
         setHoveredBox(foundBox);
     }
   };
@@ -467,8 +469,10 @@ export default function Home() {
     }
   };
 
+  // Modified to not clear hoveredBox when mouse leaves container
   const handleMouseLeave = () => {
-    setHoveredBox(null);
+    // Don't clear hoveredBox anymore - we want it to persist
+    // setHoveredBox(null);
   };
 
   // Reusable function to send a chat message and handle the response
@@ -1275,21 +1279,34 @@ export default function Home() {
                           const widthPercent = (box.width / box.page_width) * 100;
                           const heightPercent = (box.height / box.page_height) * 100;
                           
+                          // Determine if this is the currently hovered or highlighted box
+                          const isHovered = hoveredBox === box;
+                          const isClicked = clickedBox === box;
+                          
+                          // Add a small buffer (0.4%) to the hovered box to prevent border from overlapping text
+                          const bufferAmount = isHovered ? 0.4 : 0;
+                          
                           return (
                             <div
                               key={`box_${index + 1}_${boxIndex}`}
-                              className="absolute border border-dashed cursor-pointer"
+                              className={`absolute border cursor-pointer ${
+                                isHovered ? 'border-2 z-20' : 
+                                isClicked ? 'border-dashed z-20' : 
+                                'border-dashed z-10'
+                              }`}
                               style={{
-                                left: `${leftPercent}%`,
-                                top: `${topPercent}%`,
-                                width: `${widthPercent}%`,
-                                height: `${heightPercent}%`,
+                                left: `${leftPercent - bufferAmount}%`,
+                                top: `${topPercent - bufferAmount}%`,
+                                width: `${widthPercent + (bufferAmount * 2)}%`,
+                                height: `${heightPercent + (bufferAmount * 2)}%`,
                                 backgroundColor: getTypeColor(box.type),
-                                borderColor: getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'),
+                                borderColor: isHovered 
+                                  ? '#FF5733' // Bright orange border for hovered box
+                                  : getTypeColor(box.type).replace('0.2', '0.5').replace('0.1', '0.4'),
                                 pointerEvents: 'auto', // Ensure clicks are captured
-                                zIndex: 10, // Make sure boxes are on top
-                                opacity: clickedBox === box ? '0.8' : '0.3',
-                                transition: 'opacity 0.2s ease',
+                                opacity: isClicked ? '0.8' : isHovered ? '0.6' : '0.3',
+                                transition: 'opacity 0.2s ease, border-color 0.2s ease',
+                                boxShadow: isHovered ? '0 0 0 2px rgba(255, 87, 51, 0.5)' : 'none', // Outer glow effect
                               }}
                               onClick={(e) => handleBoxClick(box, e)}
                               title={box.text ? "Click to read text aloud" : "No text available"}
