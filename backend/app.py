@@ -65,7 +65,7 @@ def analyze_pdf():
                 except Exception as e:
                     print(f"Error reading from file cache {output_filepath}: {e}. Re-analyzing.")
 
-            # 3. If not in any cache, call Huridocs
+            
             print(f"Cache miss for hash: {pdf_hash[:8]}... Calling Huridocs.")
             files_for_huridocs = {'file': (file.filename, pdf_content, 'application/pdf')}
             # Increase timeout to 1 hour (3600 seconds) for potentially long analyses
@@ -115,4 +115,4 @@ def analyze_pdf():
 if __name__ == '__main__':
     # Runs the app in debug mode locally
     # For production, use a proper WSGI server like Gunicorn or Waitress
-    app.run(debug=True, host='0.0.0.0', port=5001) # Using port 5001 to avoid conflict with frontend (usually 3000) 
+    app.run(debug=True, host='0.0.0.0', port=5001) 
