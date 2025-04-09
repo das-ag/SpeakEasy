@@ -662,8 +662,9 @@ export default function Home() {
           // We don't need to reset clickedBox here
         };
         
-        utterance.onerror = () => {
-          console.error('Chat Speech error');
+        utterance.onerror = (event) => {
+          // Log the specific speech error event
+          console.error('Chat Speech error:', event);
           setIsReading(false);
           setShowToast(false);
         };
