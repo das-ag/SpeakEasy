@@ -30,6 +30,7 @@ interface SegmentBox {
 interface ChatMessage {
   sender: 'user' | 'bot';
   text: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sources?: any[]; // Optional: To store source document snippets
   id?: string; // Add unique identifier for tracking expanded state
 }
@@ -101,6 +102,7 @@ export default function Home() {
   const [showVoiceSelector, setShowVoiceSelector] = useState<boolean>(false);
   const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null); // To hold the SpeechRecognition instance
   const [lastQueryWasVoice, setLastQueryWasVoice] = useState<boolean>(false);
 
@@ -221,14 +223,16 @@ export default function Home() {
           recognition.interimResults = false; // Only get final results
           recognition.lang = 'en-US'; // Set language
 
-          recognition.onresult = (event) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          recognition.onresult = (event: { results: { transcript: any; }[][]; }) => {
             const transcript = event.results[0][0].transcript;
             console.log('Speech recognized:', transcript);
             setChatQuery(transcript); // Update input box with recognized text
             setIsRecording(false); // Stop recording state
           };
 
-          recognition.onerror = (event) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          recognition.onerror = (event: { error: any; }) => {
             console.error('Speech recognition error:', event.error);
             setError(`Speech recognition error: ${event.error}`);
             setIsRecording(false);
@@ -315,6 +319,7 @@ export default function Home() {
         try {
             const errorData = await response.json();
             errorMsg = errorData.error || errorMsg;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (jsonError) {
             // If response isn't JSON, use text
             errorMsg = await response.text();
@@ -518,6 +523,7 @@ export default function Home() {
               const errorData = JSON.parse(errorText); 
               errorMsg = errorData.error || errorMsg; 
             } 
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             catch (parseError) { errorMsg = errorText || errorMsg; }
             throw new Error(errorMsg);
         }
@@ -747,6 +753,7 @@ export default function Home() {
   useEffect(() => {
     // ... existing initialization ...
     if (recognitionRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognitionRef.current.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
         console.log('Speech recognized:', transcript);
@@ -973,7 +980,7 @@ export default function Home() {
     if (!box || !summaries) return null;
     
     // Try to find a matching summary based on page number and bbox
-    return Object.entries(summaries).reduce((match, [id, summary]) => {
+    return Object.entries(summaries).reduce((match, [, summary]) => {
       if (match) return match;
       
       // Check if this summary matches the box (same page and similar position)
@@ -1218,7 +1225,7 @@ export default function Home() {
                         {/* Filter summaries based on search query */}
                         {summaries && Object.entries(summaries).length > 0 ? (
                           Object.entries(summaries)
-                            .filter(([id, summary]) => 
+                            .filter(([, summary]) => 
                               summarySearchQuery === "" || 
                               summary.summary.toLowerCase().includes(summarySearchQuery.toLowerCase()) ||
                               summary.text.toLowerCase().includes(summarySearchQuery.toLowerCase())
@@ -1525,7 +1532,7 @@ export default function Home() {
                 <div className="flex-grow flex flex-col items-center justify-center text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-3"></div>
                   <p className="text-gray-700 font-medium mb-1">Preparing chat functionality...</p>
-                  <p className="text-sm text-gray-500">You'll be able to chat with your document once analysis is complete.</p>
+                  <p className="text-sm text-gray-500">You&apos;ll be able to chat with your document once analysis is complete.</p>
                 </div>
               ) : analysisResult && chatFileHash ? (
                 <>
@@ -1745,7 +1752,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
                     </svg>
                     <p className="text-sm mb-2">Chat will appear here</p>
-                    <p className="text-xs">Click "Analyze Document" to enable chat</p>
+                    <p className="text-xs">Click &quot;Analyze Document&quot; to enable chat</p>
                   </div>
                 </>
               )}
