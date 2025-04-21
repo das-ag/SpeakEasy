@@ -39,6 +39,10 @@ npm run
 ```
 
 ---
+### Screenshots
+![Structure Inference Diagram](https://github.com/das-ag/SpeakEasy/raw/main/demo/structure_Inference.png)
+
+---
 
 ## Team Members
 
