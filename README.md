@@ -25,13 +25,26 @@ To address this issue, we introduce **SpeakEasy** — a system that enables user
 - **Speech-to-Text (STT)**  
   Translates user voice queries into text for interpretation by the system.
 
+
+---
+
+## To Run
+
+```
+git clone https://github.com/das-ag/SpeakEasy.git
+cd backend
+python app.py &
+cd ../frontend
+npm run
+```
+
 ---
 
 ## Team Members
 
 - Agastya Das  
 - Ming Yan  
-- Ashwin Ravindra Bharadwaj  
+- Ashwin Ravindra Bharadwaj
 - Ankit Sinha  
 
 ---
